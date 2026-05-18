@@ -81,7 +81,7 @@ Add a site entry to the `AUTHORIZED_SITES` Worker secret.
     "title": "Ven Support",
     "intro": "Ask Ven for help with this website.",
     "aiModel": "@cf/google/gemma-4-26b-a4b-it",
-    "aiInstructions": "You are Ven Agency website support. Keep replies concise and create a support ticket when Ven implementation work is needed."
+    "aiInstructions": "You are Ven Agency website support. Keep replies concise, navigate users to safe same-site WordPress screens when helpful, and create a support ticket when Ven implementation work is needed."
   }
 }
 ```
@@ -114,6 +114,7 @@ Set `enabled` to `false` to remotely hide the assistant for a site after the plu
 The current Worker exposes these safe tools to the AI layer:
 
 - `open_admin_screen` - suggests a safe WordPress admin URL.
+- `navigate_site` - navigates the current browser to a safe same-site WordPress admin or frontend path.
 - `propose_page_change` - drafts a page/content change for user review.
 - `create_support_ticket` - creates a ClickUp task for Ven team follow-up when implementation work is needed.
 
@@ -203,7 +204,7 @@ Release process:
 1. Update the plugin header version, `Ven_Agency_Support::VERSION`, and `readme.txt` stable tag/changelog.
 2. Run `npm run plugin:lint`.
 3. Commit and push to `main`.
-4. Create a GitHub release such as `v1.3.7`.
+4. Create a GitHub release such as `v1.3.8`.
 5. The release workflow attaches `ven-agency-support.zip` to the release.
 6. WordPress will surface the update on the Plugins screen during its next update check.
 
@@ -211,7 +212,7 @@ Manual release ZIP:
 
 ```sh
 npm run plugin:zip
-gh release create v1.3.7 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.7" --notes "Release notes"
+gh release create v1.3.8 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.8" --notes "Release notes"
 ```
 
 ## Client Website Repositories

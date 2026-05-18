@@ -33,6 +33,33 @@ const VEN_SUPPORT_TOOLS = [
 		}
 	),
 	aiTool(
+		'navigate_site',
+		'Navigate the user to a safe same-site WordPress admin or frontend screen when they ask to be taken somewhere.',
+		{
+			type: 'object',
+			properties: {
+				area: {
+					type: 'string',
+					enum: ['admin', 'site'],
+					description: 'Use admin for wp-admin screens and site for frontend pages.',
+				},
+				path: {
+					type: 'string',
+					description: 'Relative same-site path. For admin, use paths like edit.php?post_type=page. For frontend, use paths like /contact/.',
+				},
+				label: {
+					type: 'string',
+					description: 'Short label for the navigation action.',
+				},
+				reason: {
+					type: 'string',
+					description: 'One sentence explaining where you are taking the user.',
+				},
+			},
+			required: ['area', 'path', 'label'],
+		}
+	),
+	aiTool(
 		'propose_page_change',
 		'Draft a page or content change for the user to review before any WordPress content is changed.',
 		{
@@ -208,7 +235,7 @@ async function createAiReply(env, site, payload) {
 	const history = Array.isArray(payload.history) ? payload.history.slice(-8) : [];
 	const systemPrompt = [
 		site.aiInstructions || 'You are Ven Agency website support. Help the logged-in website user troubleshoot WordPress content, forms, pages, and website issues. Keep replies concise. If the issue needs implementation work or a Ven team member should investigate, call create_support_ticket.',
-		'You may use tools to suggest safe next actions. Never claim you have changed WordPress content directly. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
+		'You may use tools to suggest safe next actions. When the user asks you to take them to a WordPress admin screen or frontend page, call navigate_site with a same-site relative path. Never claim you have changed WordPress content directly. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
 		payload.context ? `Current WordPress context: ${JSON.stringify(safeContext(payload.context)).slice(0, 1200)}` : '',
 	].filter(Boolean).join('\n\n');
 	const messages = [
@@ -354,7 +381,7 @@ async function toolCallToAction(call, payload, env, site) {
 	const args = parseToolArguments(call.arguments || call.function?.arguments || {});
 
 	if ('open_admin_screen' === name) {
-		const url = adminActionUrl(payload.adminUrl, args.path);
+		const url = adminActionUrl(payload.siteUrl, payload.adminUrl, args.path);
 		if (!url) {
 			return null;
 		}
@@ -363,6 +390,22 @@ async function toolCallToAction(call, payload, env, site) {
 			type: 'open_admin_screen',
 			label: String(args.label || 'Open admin screen').slice(0, 80),
 			url,
+			reason: String(args.reason || '').slice(0, 240),
+		};
+	}
+
+	if ('navigate_site' === name) {
+		const area = 'site' === args.area ? 'site' : 'admin';
+		const url = navigationActionUrl(payload.siteUrl, payload.adminUrl, area, args.path);
+		if (!url) {
+			return null;
+		}
+
+		return {
+			type: 'navigate_site',
+			label: String(args.label || 'Open screen').slice(0, 80),
+			url,
+			area,
 			reason: String(args.reason || '').slice(0, 240),
 		};
 	}
@@ -424,16 +467,40 @@ function parseToolArguments(value) {
 	return 'object' === typeof value ? value : {};
 }
 
-function adminActionUrl(adminUrl, path) {
-	const base = String(adminUrl || '').trim();
+function adminActionUrl(siteUrl, adminUrl, path) {
+	return navigationActionUrl(siteUrl, adminUrl, 'admin', path);
+}
+
+function navigationActionUrl(siteUrl, adminUrl, area, path) {
+	const siteBase = String(siteUrl || '').trim();
+	const adminBase = String(adminUrl || '').trim();
 	const requestedPath = String(path || '').trim();
-	if (!base || !requestedPath || requestedPath.startsWith('http') || requestedPath.startsWith('//')) {
+	const siteOrigin = normalizeOrigin(siteBase);
+	if (!siteOrigin || !requestedPath || /^[a-z][a-z\d+.-]*:/i.test(requestedPath) || requestedPath.startsWith('//')) {
 		return '';
 	}
 
-	const safePath = requestedPath.replace(/^\/+/, '');
 	try {
-		return new URL(safePath, base).toString();
+		if ('admin' === area) {
+			const admin = new URL(adminBase || siteBase);
+			const adminRootPath = admin.pathname.replace(/[^/]*$/, '');
+			const adminRoot = `${admin.origin}${adminRootPath}`;
+			const target = requestedPath.startsWith('/')
+				? new URL(requestedPath, siteBase)
+				: new URL(requestedPath.replace(/^wp-admin\//, ''), adminRoot);
+			if (target.origin.toLowerCase() !== siteOrigin || !target.pathname.startsWith(adminRootPath)) {
+				return '';
+			}
+
+			return target.toString();
+		}
+
+		const target = new URL(requestedPath, siteBase);
+		if (target.origin.toLowerCase() !== siteOrigin) {
+			return '';
+		}
+
+		return target.toString();
 	} catch {
 		return '';
 	}

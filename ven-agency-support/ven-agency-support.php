@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.3.6
+ * Version: 1.3.7
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.3.6';
+	private const VERSION       = '1.3.7';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -520,6 +520,17 @@ final class Ven_Agency_Support {
 				continue;
 			}
 
+			if ( 'navigate_site' === $type ) {
+				$clean[] = array(
+					'type'   => $type,
+					'label'  => sanitize_text_field( $action['label'] ?? 'Open screen' ),
+					'url'    => esc_url_raw( $action['url'] ?? '' ),
+					'area'   => sanitize_key( $action['area'] ?? 'admin' ),
+					'reason' => sanitize_text_field( $action['reason'] ?? '' ),
+				);
+				continue;
+			}
+
 			if ( 'propose_page_change' === $type ) {
 				$clean[] = array(
 					'type'          => $type,
@@ -927,6 +938,14 @@ CSS;
 		messages.classList.toggle('has-overflow', hasOverflow);
 		messages.scrollTop = messages.scrollHeight;
 	};
+	const safeNavigationUrl = function (url) {
+		try {
+			const target = new URL(url, window.location.href);
+			return target.origin === window.location.origin ? target.toString() : '';
+		} catch (error) {
+			return '';
+		}
+	};
 	const addMessage = function (role, text) {
 		if (!messages || !text) return;
 		const node = document.createElement('div');
@@ -952,6 +971,24 @@ CSS;
 			link.textContent = action.label || 'Open screen';
 			node.appendChild(detail);
 			node.appendChild(link);
+		} else if (action.type === 'navigate_site') {
+			const targetUrl = safeNavigationUrl(action.url || '');
+			detail.textContent = action.reason || 'Taking you there now.';
+			const button = document.createElement('button');
+			button.type = 'button';
+			button.textContent = action.label || 'Open screen';
+			button.addEventListener('click', function () {
+				if (targetUrl) {
+					window.location.assign(targetUrl);
+				}
+			});
+			node.appendChild(detail);
+			node.appendChild(button);
+			if (targetUrl) {
+				window.setTimeout(function () {
+					window.location.assign(targetUrl);
+				}, 650);
+			}
 		} else if (action.type === 'propose_page_change') {
 			detail.textContent = [action.target, action.changeSummary].filter(Boolean).join(': ');
 			node.appendChild(detail);

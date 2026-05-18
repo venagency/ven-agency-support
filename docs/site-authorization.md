@@ -31,7 +31,7 @@ define( 'VEN_SUPPORT_SITE_SECRET', getenv( 'VEN_SUPPORT_SITE_SECRET' ) );
     "title": "Ven Support",
     "intro": "Ask Ven for help with this website.",
     "aiModel": "@cf/google/gemma-4-26b-a4b-it",
-    "aiInstructions": "You are Ven Agency website support. Keep replies concise and create a support ticket when Ven implementation work is needed."
+    "aiInstructions": "You are Ven Agency website support. Keep replies concise, navigate users to safe same-site WordPress screens when helpful, and create a support ticket when Ven implementation work is needed."
   }
 }
 ```

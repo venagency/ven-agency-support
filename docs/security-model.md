@@ -46,6 +46,7 @@ The assistant must not directly execute arbitrary code or mutate WordPress conte
 Current tools can:
 
 - open an admin screen,
+- navigate the current browser to a same-site WordPress admin or frontend path,
 - propose a content change,
 - create a ClickUp support task when the AI determines Ven team follow-up is needed.
 
