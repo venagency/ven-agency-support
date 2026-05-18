@@ -1,0 +1,26 @@
+name: Build Release Zip
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build plugin zip
+        run: |
+          rm -f ven-agency-support.zip
+          zip -r ven-agency-support.zip ven-agency-support -x '*.DS_Store'
+
+      - name: Attach plugin zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" ven-agency-support.zip --clobber
