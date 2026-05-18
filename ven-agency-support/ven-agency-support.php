@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.2.4
+ * Version: 1.2.5
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.2.4';
+	private const VERSION       = '1.2.5';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -802,7 +802,7 @@ final class Ven_Agency_Support {
 
 	private static function css(): string {
 		return <<<'CSS'
-.ven-support-assistant { bottom: 24px; color: #243246; position: fixed; right: 24px; z-index: 100000; }
+.ven-support-assistant { bottom: 24px; color: #243246; position: fixed; right: 24px; transform: scale(.6); transform-origin: bottom right; z-index: 100000; }
 .ven-support-assistant__launcher { align-items: center; background: #0f1216; border: 0; border-radius: 999px; box-shadow: 0 18px 48px rgba(15,18,22,.28); cursor: pointer; display: flex; height: 64px; justify-content: center; padding: 0; width: 64px; }
 .ven-support-assistant__launcher img { display: block; height: auto; width: 32px; }
 .ven-support-assistant__window { background: #fff; border: 1px solid #d8dee8; border-radius: 10px; bottom: 78px; box-shadow: 0 24px 80px rgba(15,18,22,.18); max-height: calc(100vh - 132px); overflow: auto; padding: 22px; position: absolute; right: 0; width: min(420px, calc(100vw - 48px)); }
