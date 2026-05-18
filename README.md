@@ -117,7 +117,7 @@ The current Worker exposes these safe tools to the AI layer:
 
 - `open_admin_screen` - legacy admin navigation tool; normalized into direct same-site navigation.
 - `navigate_site` - navigates the current browser to a safe same-site WordPress admin or frontend path.
-- `annotate_screen` - highlights a visible element from the sanitized screen context.
+- `annotate_screen` - highlights an exact visible element or labeled form control from the sanitized screen context.
 - `propose_page_change` - drafts a page/content change for user review.
 - `update_post_data` - prepares a confirmed post/page title, content, or excerpt update.
 - `create_support_ticket` - creates a ClickUp task for Ven team follow-up when implementation work is needed.
@@ -208,7 +208,7 @@ Release process:
 1. Update the plugin header version, `Ven_Agency_Support::VERSION`, and `readme.txt` stable tag/changelog.
 2. Run `npm run plugin:lint`.
 3. Commit and push to `main`.
-4. Create a GitHub release such as `v1.3.11`.
+4. Create a GitHub release such as `v1.3.12`.
 5. The release workflow attaches `ven-agency-support.zip` to the release.
 6. WordPress will surface the update on the Plugins screen during its next update check.
 
@@ -216,7 +216,7 @@ Manual release ZIP:
 
 ```sh
 npm run plugin:zip
-gh release create v1.3.11 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.11" --notes "Release notes"
+gh release create v1.3.12 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.12" --notes "Release notes"
 ```
 
 ## Client Website Repositories

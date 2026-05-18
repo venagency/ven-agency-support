@@ -61,21 +61,21 @@ const VEN_SUPPORT_TOOLS = [
 	),
 	aiTool(
 		'annotate_screen',
-		'Highlight a visible element on the user screen and explain what to do next.',
+		'Highlight an exact visible element, field, control, or row on the user screen and explain what to do next.',
 		{
 			type: 'object',
 			properties: {
 				selector: {
 					type: 'string',
-					description: 'A selector from the provided screen context, such as [data-ven-screen-id="ven-screen-3"].',
+					description: 'Use a selector from the provided screen context. Prefer the element whose label or context best matches the setting or control the user asked about, such as [data-ven-screen-id="ven-screen-3"].',
 				},
 				label: {
 					type: 'string',
-					description: 'Short label shown near the highlighted element.',
+					description: 'Short label shown near the highlighted field or control.',
 				},
 				instructions: {
 					type: 'string',
-					description: 'Concise instruction for what the user should do with this element.',
+					description: 'Concise instruction for what the user should do with this highlighted field or control. Mention if it is disabled or read-only.',
 				},
 				placement: {
 					type: 'string',
@@ -300,7 +300,7 @@ async function createAiReply(env, site, payload) {
 	const history = Array.isArray(payload.history) ? payload.history.slice(-8) : [];
 	const systemPrompt = [
 		site.aiInstructions || 'You are Ven Agency website support. Help the logged-in website user troubleshoot WordPress content, forms, pages, and website issues. Keep replies concise. If the issue needs implementation work or a Ven team member should investigate, call create_support_ticket.',
-		'You may use tools to suggest safe next actions. When the user asks you to take them, move them, open a WordPress screen, or go to a frontend page, call navigate_site with a same-site relative path and do not merely suggest a link. Use annotate_screen when it would help to point at a visible item from the provided screen context. For data updates, call update_post_data only for WordPress post/page title, content, or excerpt updates with exact new values; the user must confirm before WordPress applies the update. Never claim you have changed WordPress content directly unless a returned update action has been confirmed by WordPress. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
+		'You may use tools to suggest safe next actions. When the user asks you to take them, move them, open a WordPress screen, or go to a frontend page, call navigate_site with a same-site relative path and do not merely suggest a link. When the user asks where something is, asks you to show or highlight a setting, or asks exactly where to change something on the current screen, call annotate_screen with the best matching visible field or control from screen.elements. Match by label, context, id, name, and visible text, and prefer a precise form field over a broad heading. For data updates, call update_post_data only for WordPress post/page title, content, or excerpt updates with exact new values; the user must confirm before WordPress applies the update. Never claim you have changed WordPress content directly unless a returned update action has been confirmed by WordPress. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
 		payload.context ? `Current WordPress context: ${JSON.stringify(safeContext(payload.context)).slice(0, 4500)}` : '',
 	].filter(Boolean).join('\n\n');
 	const messages = [
@@ -643,15 +643,19 @@ function safeScreenContext(screen) {
 		return {};
 	}
 
-	const elements = Array.isArray(screen.elements) ? screen.elements.slice(0, 40).map((element) => ({
+	const elements = Array.isArray(screen.elements) ? screen.elements.slice(0, 60).map((element) => ({
 		selector: String(element.selector || '').slice(0, 120),
 		tag: String(element.tag || '').slice(0, 20),
 		role: String(element.role || '').slice(0, 40),
 		label: String(element.label || '').slice(0, 180),
 		text: String(element.text || '').slice(0, 180),
+		context: String(element.context || '').slice(0, 260),
 		href: String(element.href || '').slice(0, 260),
+		id: String(element.id || '').slice(0, 80),
 		name: String(element.name || '').slice(0, 80),
 		type: String(element.type || '').slice(0, 40),
+		disabled: Boolean(element.disabled),
+		readOnly: Boolean(element.readOnly),
 		rect: element.rect && 'object' === typeof element.rect ? {
 			x: Number(element.rect.x) || 0,
 			y: Number(element.rect.y) || 0,

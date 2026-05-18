@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.3.10
+ * Version: 1.3.11
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.3.10';
+	private const VERSION       = '1.3.11';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -697,9 +697,13 @@ final class Ven_Agency_Support {
 				'role'     => sanitize_text_field( $element['role'] ?? '' ),
 				'label'    => sanitize_text_field( $element['label'] ?? '' ),
 				'text'     => sanitize_text_field( $element['text'] ?? '' ),
+				'context'  => sanitize_text_field( $element['context'] ?? '' ),
 				'href'     => esc_url_raw( $element['href'] ?? '' ),
+				'id'       => sanitize_text_field( $element['id'] ?? '' ),
 				'name'     => sanitize_text_field( $element['name'] ?? '' ),
 				'type'     => sanitize_key( $element['type'] ?? '' ),
+				'disabled' => ! empty( $element['disabled'] ),
+				'readOnly' => ! empty( $element['readOnly'] ),
 				'rect'     => array(
 					'x'      => (int) ( $element['rect']['x'] ?? 0 ),
 					'y'      => (int) ( $element['rect']['y'] ?? 0 ),
@@ -1128,6 +1132,40 @@ CSS;
 	const readableText = function (element) {
 		return (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 180);
 	};
+	const fieldLabel = function (element) {
+		const direct = element.getAttribute('aria-label') || element.getAttribute('title') || element.getAttribute('placeholder');
+		if (direct) return direct;
+
+		if (element.id) {
+			const label = document.querySelector('label[for="' + CSS.escape(element.id) + '"]');
+			if (label && readableText(label)) return readableText(label);
+		}
+
+		const wrappingLabel = element.closest('label');
+		if (wrappingLabel && readableText(wrappingLabel)) return readableText(wrappingLabel);
+
+		const row = element.closest('tr');
+		if (row) {
+			const rowLabel = row.querySelector('th label, th, .label, .form-field label');
+			if (rowLabel && readableText(rowLabel)) return readableText(rowLabel);
+		}
+
+		return element.getAttribute('name') || readableText(element);
+	};
+	const fieldContext = function (element) {
+		const row = element.closest('tr,.form-field,.acf-field,.components-panel__row,.edit-post-post-link__preview-label');
+		if (row && readableText(row)) return readableText(row).slice(0, 260);
+		return '';
+	};
+	const screenContextWeight = function (element) {
+		let weight = 0;
+		if (element.closest('#wpbody-content,.edit-post-layout__content,.interface-interface-skeleton__content')) weight -= 1000;
+		if (element.matches('input:not([type="hidden"]),textarea,select')) weight -= 120;
+		if (element.matches('button,[role="button"],[role="tab"],[role="menuitem"]')) weight -= 40;
+		if (element.matches('a[href]')) weight += 20;
+		if (element.closest('#adminmenu,#wpadminbar')) weight += 450;
+		return weight;
+	};
 	const isVisibleElement = function (element) {
 		if (!element || root.contains(element) || element.closest('.ven-support-screen-highlight,.ven-support-screen-callout')) return false;
 		if (element.matches('input[type="hidden"],input[type="password"],script,style')) return false;
@@ -1153,21 +1191,32 @@ CSS;
 		].join(',');
 		const elements = Array.from(document.querySelectorAll(selectors))
 			.filter(isVisibleElement)
-			.slice(0, 40)
+			.sort(function (a, b) {
+				const weight = screenContextWeight(a) - screenContextWeight(b);
+				if (weight) return weight;
+				const aRect = a.getBoundingClientRect();
+				const bRect = b.getBoundingClientRect();
+				return aRect.top === bRect.top ? aRect.left - bRect.left : aRect.top - bRect.top;
+			})
+			.slice(0, 60)
 			.map(function (element, index) {
 				const screenId = 'ven-screen-' + index;
 				element.setAttribute('data-ven-screen-id', screenId);
 				const rect = element.getBoundingClientRect();
-				const label = element.getAttribute('aria-label') || element.getAttribute('title') || element.getAttribute('placeholder') || element.getAttribute('name') || readableText(element);
+				const label = fieldLabel(element);
 				return {
 					selector: '[data-ven-screen-id="' + screenId + '"]',
 					tag: element.tagName.toLowerCase(),
 					role: element.getAttribute('role') || '',
 					label: String(label || '').replace(/\s+/g, ' ').trim().slice(0, 180),
 					text: readableText(element),
+					context: fieldContext(element),
 					href: element.href || '',
+					id: element.id || '',
 					name: element.getAttribute('name') || '',
 					type: element.getAttribute('type') || '',
+					disabled: Boolean(element.disabled),
+					readOnly: Boolean(element.readOnly),
 					rect: {
 						x: Math.round(rect.left),
 						y: Math.round(rect.top),

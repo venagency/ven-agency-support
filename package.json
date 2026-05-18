@@ -1,6 +1,6 @@
 {
   "name": "ven-agency-support",
-  "version": "1.3.10",
+  "version": "1.3.11",
   "private": true,
   "description": "Ven Agency WordPress support assistant plugin and Cloudflare Worker gateway.",
   "type": "module",
