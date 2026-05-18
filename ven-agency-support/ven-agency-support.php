@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.2.3
+ * Version: 1.2.4
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.2.3';
+	private const VERSION       = '1.2.4';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -123,6 +123,9 @@ final class Ven_Agency_Support {
 		$name  = get_user_meta( $user->ID, 'ven_support_name', true ) ?: $user->display_name;
 		$email = get_user_meta( $user->ID, 'ven_support_email', true ) ?: $user->user_email;
 		$phone = get_user_meta( $user->ID, 'ven_support_phone', true );
+		$chat_enabled = ! empty( $settings['chatEnabled'] );
+		$tickets_enabled = ! empty( $settings['ticketsEnabled'] );
+		$show_tabs = $chat_enabled && $tickets_enabled;
 		?>
 		<div class="ven-support-assistant" data-ven-support-assistant>
 			<button type="button" class="ven-support-assistant__launcher" data-ven-launcher aria-expanded="false" aria-label="<?php esc_attr_e( 'Open Ven support', 'ven-agency-support' ); ?>">
@@ -143,16 +146,18 @@ final class Ven_Agency_Support {
 					</div>
 					<p class="ven-support-assistant__intro" data-ven-intro><?php echo esc_html( $settings['intro'] ?? __( 'Ask Ven for help or create a support task.', 'ven-agency-support' ) ); ?></p>
 
-					<div class="ven-support-assistant__tabs" role="tablist">
-						<?php if ( ! empty( $settings['chatEnabled'] ) ) : ?>
+					<?php if ( $show_tabs ) : ?>
+						<div class="ven-support-assistant__tabs" role="tablist">
+							<?php if ( $chat_enabled ) : ?>
 							<button type="button" class="is-active" data-ven-tab="chat"><?php esc_html_e( 'Chat', 'ven-agency-support' ); ?></button>
-						<?php endif; ?>
-						<?php if ( ! empty( $settings['ticketsEnabled'] ) ) : ?>
+							<?php endif; ?>
+							<?php if ( $tickets_enabled ) : ?>
 							<button type="button" data-ven-tab="ticket"><?php esc_html_e( 'Support request', 'ven-agency-support' ); ?></button>
-						<?php endif; ?>
-					</div>
+							<?php endif; ?>
+						</div>
+					<?php endif; ?>
 
-					<?php if ( ! empty( $settings['chatEnabled'] ) ) : ?>
+					<?php if ( $chat_enabled ) : ?>
 						<section class="ven-support-assistant__panel is-active" data-ven-panel="chat">
 							<div class="ven-support-assistant__messages" data-ven-messages aria-live="polite"></div>
 							<form class="ven-support-assistant__chat-form" data-ven-chat-form>
@@ -162,8 +167,8 @@ final class Ven_Agency_Support {
 						</section>
 					<?php endif; ?>
 
-					<?php if ( ! empty( $settings['ticketsEnabled'] ) ) : ?>
-						<section class="ven-support-assistant__panel" data-ven-panel="ticket">
+					<?php if ( $tickets_enabled ) : ?>
+						<section class="ven-support-assistant__panel <?php echo $chat_enabled ? '' : 'is-active'; ?>" data-ven-panel="ticket">
 							<form class="ven-support-assistant__ticket-form" data-ven-ticket-form enctype="multipart/form-data">
 								<label>
 									<span><?php esc_html_e( 'Your name', 'ven-agency-support' ); ?></span>
@@ -797,50 +802,50 @@ final class Ven_Agency_Support {
 
 	private static function css(): string {
 		return <<<'CSS'
-.ven-support-assistant { bottom: 24px; color: rgba(255,255,255,.82); position: fixed; right: 24px; z-index: 100000; }
+.ven-support-assistant { bottom: 24px; color: #243246; position: fixed; right: 24px; z-index: 100000; }
 .ven-support-assistant__launcher { align-items: center; background: #0f1216; border: 0; border-radius: 999px; box-shadow: 0 18px 48px rgba(15,18,22,.28); cursor: pointer; display: flex; height: 64px; justify-content: center; padding: 0; width: 64px; }
 .ven-support-assistant__launcher img { display: block; height: auto; width: 32px; }
-.ven-support-assistant__window { background: #0f1216; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; bottom: 78px; box-shadow: 0 24px 80px rgba(15,18,22,.34); max-height: calc(100vh - 132px); overflow: auto; padding: 22px; position: absolute; right: 0; width: min(420px, calc(100vw - 48px)); }
+.ven-support-assistant__window { background: #fff; border: 1px solid #d8dee8; border-radius: 10px; bottom: 78px; box-shadow: 0 24px 80px rgba(15,18,22,.18); max-height: calc(100vh - 132px); overflow: auto; padding: 22px; position: absolute; right: 0; width: min(420px, calc(100vw - 48px)); }
 .ven-support-assistant__head { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }
-.ven-support-assistant__close { background: rgba(255,255,255,.08); border: 0; border-radius: 999px; color: #fff; cursor: pointer; font-size: 22px; height: 32px; line-height: 28px; padding: 0; width: 32px; }
-.ven-support-assistant__logo { display: block; height: auto; margin: 0 0 18px; max-width: 128px; width: 128px; }
+.ven-support-assistant__close { background: #eef2f6; border: 0; border-radius: 999px; color: #243246; cursor: pointer; font-size: 22px; height: 32px; line-height: 28px; padding: 0; width: 32px; }
+.ven-support-assistant__logo { display: block; filter: invert(1); height: auto; margin: 0 0 18px; max-width: 128px; width: 128px; }
 .ven-support-assistant__loading { align-items: flex-start; display: flex; flex-direction: column; min-height: 220px; justify-content: center; }
 .ven-support-assistant__loading[hidden], .ven-support-assistant__app[hidden] { display: none !important; }
-.ven-support-assistant__spinner { animation: venSpin .8s linear infinite; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 999px; height: 28px; margin: 0 0 14px; width: 28px; }
+.ven-support-assistant__spinner { animation: venSpin .8s linear infinite; border: 2px solid #d8dee8; border-top-color: #0f1216; border-radius: 999px; height: 28px; margin: 0 0 14px; width: 28px; }
 @keyframes venSpin { to { transform: rotate(360deg); } }
-.ven-support-assistant__intro { color: rgba(255,255,255,.72); margin: 0 0 18px; }
-.ven-support-assistant__tabs { background: rgba(255,255,255,.06); border-radius: 6px; display: flex; gap: 4px; margin: 0 0 16px; padding: 4px; }
-.ven-support-assistant__tabs button { background: transparent; border: 0; border-radius: 4px; color: rgba(255,255,255,.68); cursor: pointer; flex: 1; font-weight: 700; padding: 8px 10px; }
-.ven-support-assistant__tabs button.is-active { background: #fff; color: #0f1216; }
+.ven-support-assistant__intro { color: #536174; margin: 0 0 18px; }
+.ven-support-assistant__tabs { background: #eef2f6; border-radius: 6px; display: flex; gap: 4px; margin: 0 0 16px; padding: 4px; }
+.ven-support-assistant__tabs button { background: transparent; border: 0; border-radius: 4px; color: #536174; cursor: pointer; flex: 1; font-weight: 700; padding: 8px 10px; }
+.ven-support-assistant__tabs button.is-active { background: #0f1216; color: #fff; }
 .ven-support-assistant__panel { display: none; }
 .ven-support-assistant__panel.is-active { display: block; }
-.ven-support-assistant__messages { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 6px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; max-height: 250px; min-height: 160px; overflow: auto; padding: 12px; }
+.ven-support-assistant__messages { background: #f5f7fa; border: 1px solid #d8dee8; border-radius: 6px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; max-height: 250px; min-height: 160px; overflow: auto; padding: 12px; }
 .ven-support-assistant__message { border-radius: 6px; line-height: 1.45; padding: 9px 10px; }
-.ven-support-assistant__message--user { align-self: flex-end; background: #fff; color: #0f1216; max-width: 86%; }
-.ven-support-assistant__message--assistant { align-self: flex-start; background: rgba(255,255,255,.10); color: #fff; max-width: 92%; }
-.ven-support-assistant__action { align-self: stretch; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); border-radius: 6px; color: rgba(255,255,255,.78); line-height: 1.45; padding: 11px 12px; }
-.ven-support-assistant__action strong { color: #fff; display: block; margin-bottom: 4px; }
+.ven-support-assistant__message--user { align-self: flex-end; background: #0f1216; color: #fff; max-width: 86%; }
+.ven-support-assistant__message--assistant { align-self: flex-start; background: #fff; border: 1px solid #d8dee8; color: #243246; max-width: 92%; }
+.ven-support-assistant__action { align-self: stretch; background: #fff; border: 1px solid #d8dee8; border-radius: 6px; color: #536174; line-height: 1.45; padding: 11px 12px; }
+.ven-support-assistant__action strong { color: #243246; display: block; margin-bottom: 4px; }
 .ven-support-assistant__action p { margin: 0 0 8px; }
-.ven-support-assistant__action pre { background: rgba(255,255,255,.08); border-radius: 4px; color: #fff; margin: 8px 0; max-height: 150px; overflow: auto; padding: 8px; white-space: pre-wrap; }
-.ven-support-assistant__action button, .ven-support-assistant__action a { align-items: center; background: #fff; border: 0; border-radius: 4px; color: #0f1216; cursor: pointer; display: inline-flex; font-weight: 700; min-height: 30px; padding: 5px 10px; text-decoration: none; }
+.ven-support-assistant__action pre { background: #f5f7fa; border-radius: 4px; color: #243246; margin: 8px 0; max-height: 150px; overflow: auto; padding: 8px; white-space: pre-wrap; }
+.ven-support-assistant__action button, .ven-support-assistant__action a { align-items: center; background: #0f1216; border: 0; border-radius: 4px; color: #fff; cursor: pointer; display: inline-flex; font-weight: 700; min-height: 30px; padding: 5px 10px; text-decoration: none; }
 .ven-support-assistant label { display: block; margin: 0 0 14px; }
-.ven-support-assistant label span { color: rgba(255,255,255,.82); display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.ven-support-assistant label span { color: #243246; display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
 .ven-support-assistant input[type="text"], .ven-support-assistant input[type="email"], .ven-support-assistant textarea { background: #fff; border: 1px solid #d2d6dc; border-radius: 4px; box-sizing: border-box; color: #1d2327; max-width: 100%; width: 100%; }
 .ven-support-assistant textarea { min-height: 96px; }
 .ven-support-assistant__chat-form { display: flex; flex-direction: column; gap: 10px; }
 .ven-support-assistant__upload { cursor: pointer; }
 .ven-support-assistant__file-input { height: 1px; opacity: 0; overflow: hidden; position: absolute; width: 1px; }
-.ven-support-assistant__dropzone { align-items: center; background: rgba(255,255,255,.05); border: 1px dashed rgba(255,255,255,.35); border-radius: 6px; box-sizing: border-box; display: flex !important; flex-direction: column; gap: 7px; justify-content: center; min-height: 112px; padding: 18px; text-align: center; transition: background .16s ease, border-color .16s ease, box-shadow .16s ease; width: 100%; }
-.ven-support-assistant__upload.is-dragging .ven-support-assistant__dropzone, .ven-support-assistant__dropzone:focus { background: rgba(255,255,255,.12); border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.18); outline: none; }
-.ven-support-assistant__drop-title { color: #fff !important; font-size: 13px !important; margin: 0 !important; }
-.ven-support-assistant__drop-hint { color: rgba(255,255,255,.62) !important; font-size: 12px !important; font-weight: 500 !important; margin: 0 !important; }
-.ven-support-assistant__file-list { color: rgba(255,255,255,.78) !important; font-size: 12px !important; font-weight: 600 !important; margin: 2px 0 0 !important; max-width: 100%; overflow-wrap: anywhere; }
+.ven-support-assistant__dropzone { align-items: center; background: #f5f7fa; border: 1px dashed #aab4c2; border-radius: 6px; box-sizing: border-box; display: flex !important; flex-direction: column; gap: 7px; justify-content: center; min-height: 112px; padding: 18px; text-align: center; transition: background .16s ease, border-color .16s ease, box-shadow .16s ease; width: 100%; }
+.ven-support-assistant__upload.is-dragging .ven-support-assistant__dropzone, .ven-support-assistant__dropzone:focus { background: #eef2f6; border-color: #0f1216; box-shadow: 0 0 0 2px rgba(15,18,22,.10); outline: none; }
+.ven-support-assistant__drop-title { color: #243246 !important; font-size: 13px !important; margin: 0 !important; }
+.ven-support-assistant__drop-hint { color: #64748b !important; font-size: 12px !important; font-weight: 500 !important; margin: 0 !important; }
+.ven-support-assistant__file-list { color: #536174 !important; font-size: 12px !important; font-weight: 600 !important; margin: 2px 0 0 !important; max-width: 100%; overflow-wrap: anywhere; }
 .ven-support-assistant__check { align-items: flex-start; display: flex !important; gap: 8px; }
 .ven-support-assistant__check input { margin-top: 2px; }
 .ven-support-assistant__check span { font-weight: 500 !important; margin: 0 !important; }
-.ven-support-assistant .button.button-primary { background: #fff; border-color: #fff; color: #0f1216; font-weight: 700; width: 100%; }
-.ven-support-assistant .button.button-primary:hover, .ven-support-assistant .button.button-primary:focus { background: rgba(255,255,255,.88); border-color: rgba(255,255,255,.88); color: #0f1216; }
-.ven-support-assistant__status { color: rgba(255,255,255,.78); font-weight: 700; margin: 12px 0 0; }
+.ven-support-assistant .button.button-primary { background: #0f1216; border-color: #0f1216; color: #fff; font-weight: 700; width: 100%; }
+.ven-support-assistant .button.button-primary:hover, .ven-support-assistant .button.button-primary:focus { background: #243246; border-color: #243246; color: #fff; }
+.ven-support-assistant__status { color: #536174; font-weight: 700; margin: 12px 0 0; }
 @media (max-width: 782px) { .ven-support-assistant { bottom: 16px; right: 16px; } .ven-support-assistant__window { bottom: 72px; max-height: calc(100vh - 108px); width: calc(100vw - 32px); } }
 CSS;
 	}
