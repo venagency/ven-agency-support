@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ven-support-task-gateway",
+  "main": "src/index.js",
+  "compatibility_date": "2026-05-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "ai": {
+    "binding": "AI"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "CF_AI_MODEL": "@cf/google/gemma-4-26b-a4b-it",
+    "CLICKUP_API_BASE": "https://api.clickup.com/api/v2"
+  }
+}

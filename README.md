@@ -1,54 +1,181 @@
 # Ven Agency Support
 
-Ven Agency Support adds a remotely controlled support assistant to authorised WordPress websites.
+Ven Agency Support is the WordPress admin support assistant used by Ven Agency to provide authorised client websites with guided help, AI-assisted troubleshooting, ClickUp support task creation, file uploads, and optional temporary support access.
 
-The plugin is intentionally thin. WordPress handles permissions, the admin UI, signed requests, uploads, and temporary access grants. Ven-controlled Cloudflare infrastructure handles site authorisation, AI responses, feature flags, and support task routing.
+This repository is the source of truth for the support assistant. Client website repositories should only consume the released WordPress plugin and point it at the Ven-managed Cloudflare Worker gateway.
 
-## Installation
+## What This Project Contains
 
-Install the release zip from GitHub, then activate **Ven Agency Support** in WordPress.
+- `ven-agency-support/` - the WordPress plugin installed on authorised client websites.
+- `cloudflare/ven-support-task-gateway/` - the Ven-managed Cloudflare Worker gateway.
+- `.github/workflows/release.yml` - release packaging for WordPress plugin ZIPs.
+- `readme.txt` - WordPress plugin metadata and changelog.
+- `docs/` - operating notes for site authorisation, security, releases, and client installation.
 
-Configure the site with constants in `wp-config.php` or host environment variables:
+## Architecture
+
+The product is split deliberately:
+
+1. The WordPress plugin renders the admin assistant UI, checks the logged-in user's WordPress capability, collects support request details, stores uploaded files in WordPress, signs gateway requests, and can grant temporary Ven support access when an administrator chooses to allow it.
+2. The Cloudflare Worker verifies the client site, controls feature flags, calls Workers AI or the fallback AI provider, and creates ClickUp tasks using Ven-held credentials.
+3. Client WordPress sites never receive the ClickUp API token or AI provider credentials.
+
+```mermaid
+flowchart LR
+  A["Client WordPress admin"] --> B["Ven Agency Support plugin"]
+  B --> C["Signed request"]
+  C --> D["Cloudflare Worker gateway"]
+  D --> E["Workers AI / AI provider"]
+  D --> F["ClickUp"]
+  D --> G["Authorised sites config"]
+```
+
+## WordPress Plugin
+
+Install the latest release ZIP from GitHub Releases, then activate **Ven Agency Support** in WordPress.
+
+Configure each client site in `wp-config.php` or through host-level environment constants:
 
 ```php
 define( 'VEN_SUPPORT_GATEWAY_URL', 'https://ven-support-task-gateway.ven-agency.workers.dev' );
-define( 'VEN_SUPPORT_SITE_ID', 'client-site-id' );
-define( 'VEN_SUPPORT_SITE_SECRET', 'client-site-secret' );
+define( 'VEN_SUPPORT_SITE_ID', 'tws-ven-com-au' );
+define( 'VEN_SUPPORT_SITE_SECRET', getenv( 'VEN_SUPPORT_SITE_SECRET' ) );
 ```
 
-The site ID and secret must match the authorised site entry in the Ven support gateway.
+The site ID and secret must match the matching entry in the Worker's `AUTHORIZED_SITES` secret.
 
-Legacy `TW_SOLAR_SUPPORT_*` constants are still supported so existing installs can migrate without breaking.
+Legacy `TW_SOLAR_SUPPORT_*` constants are still supported by the plugin so the first production install can migrate without breaking, but new sites should use the `VEN_SUPPORT_*` constants.
 
-## Releases And Updates
+## Cloudflare Worker Gateway
 
-WordPress checks GitHub Releases for new plugin versions. To ship an update:
+The Worker lives in `cloudflare/ven-support-task-gateway/`.
 
-1. Update the plugin header version and `Ven_Agency_Support::VERSION`.
-2. Commit and push the change.
-3. Create a GitHub release tag such as `v1.2.3`.
-4. The release workflow builds `ven-agency-support.zip` and attaches it to the release.
+Required Cloudflare Worker secrets:
 
-Client WordPress sites will show the update in **Plugins** once WordPress next checks plugin updates.
+- `AUTHORIZED_SITES` - JSON map of allowed client sites.
+- `CLICKUP_TOKEN` - Ven Agency ClickUp API token.
+
+Optional Worker variables or secrets:
+
+- `DEFAULT_CLICKUP_LIST_ID` - fallback ClickUp list when a site entry does not include `clickupListId`.
+- `OPENAI_API_KEY` - fallback AI provider key when Workers AI is not bound.
+- `OPENAI_MODEL` - fallback model name.
+- `OPENAI_MAX_OUTPUT_TOKENS` - fallback output limit.
+
+The Worker is configured for Workers AI and defaults to `@cf/google/gemma-4-26b-a4b-it` through the `CF_AI_MODEL` variable in `wrangler.jsonc`.
+
+## Authorising A Site
+
+Add a site entry to the `AUTHORIZED_SITES` Worker secret.
+
+```json
+{
+  "tws-ven-com-au": {
+    "enabled": true,
+    "chatEnabled": true,
+    "ticketsEnabled": true,
+    "secret": "<site-specific-shared-secret>",
+    "allowedOrigins": ["https://tws.ven.com.au"],
+    "clickupListId": "901611479405",
+    "tags": ["tw-solar"],
+    "title": "Ven Support",
+    "intro": "Ask Ven for help with this website.",
+    "aiModel": "@cf/google/gemma-4-26b-a4b-it",
+    "aiInstructions": "You are Ven Agency website support. Keep replies concise and route implementation work to a support request."
+  }
+}
+```
+
+Use a long random shared secret per client site. Keep it in the client host's secure environment or `wp-config.php`, not in a theme repository.
+
+Set `enabled` to `false` to remotely hide the assistant for a site after the plugin's short settings cache expires.
+
+## Request Flow
+
+1. WordPress requests `/site-config` to check whether the assistant is enabled.
+2. The plugin renders the assistant only when the Worker says the site is enabled.
+3. Chat and ticket requests are signed with `HMAC-SHA256(timestamp.body)`.
+4. The Worker verifies site ID, timestamp freshness, signature, and allowed origin.
+5. Chat requests are routed through Ven-controlled AI.
+6. Support requests create ClickUp tasks in the configured list.
+7. If temporary access is requested, WordPress creates or refreshes the Ven support user and includes a short-lived one-time login link in the ClickUp task.
 
 ## Security Model
 
-- Client sites must be authorised by site ID, shared secret, timestamp, signature, and origin.
-- ClickUp and AI credentials stay outside WordPress.
-- Temporary support access is granted only from the support form by an administrator.
-- AI tool calls are rendered as suggested actions unless a future approved action endpoint explicitly applies a change.
+- Every site has its own site ID and shared secret.
+- The Worker rejects requests with missing headers, old timestamps, invalid signatures, or unapproved origins.
+- ClickUp and AI credentials are stored only in Ven-controlled Cloudflare Worker secrets.
+- Temporary WordPress access is opt-in from the support form and only available to administrators.
+- The access user uses `dev@ven.com.au`.
+- The assistant does not execute arbitrary PHP, SQL, JavaScript, shell commands, or filesystem writes.
+- AI tool calls are rendered as suggested actions unless a future explicit, capability-gated WordPress endpoint applies a narrow approved change.
 
-## Development
+## AI And Tool Use
 
-Lint the plugin file with PHP before releasing:
+The current Worker exposes these safe tools to the AI layer:
+
+- `open_admin_screen` - suggests a safe WordPress admin URL.
+- `propose_page_change` - drafts a page/content change for user review.
+- `prepare_support_request` - prepares a support request draft.
+
+The current WordPress plugin renders returned tool calls as actions. It does not directly apply content changes.
+
+Future page-changing tools should be implemented as narrow, signed, capability-gated WordPress endpoints with user confirmation and a rollback path.
+
+## Local Development
+
+Run the Worker locally:
 
 ```sh
-php -l ven-agency-support/ven-agency-support.php
+npm run worker:dev
 ```
 
-Build a release zip locally:
+Lint the plugin PHP:
 
 ```sh
-rm -f ven-agency-support.zip
-zip -r ven-agency-support.zip ven-agency-support -x '*.DS_Store'
+npm run plugin:lint
 ```
+
+Build a plugin ZIP locally:
+
+```sh
+npm run plugin:zip
+```
+
+Deploy the Worker:
+
+```sh
+npm run worker:deploy
+```
+
+## Releases And Updates
+
+Client WordPress installs receive plugin update notices from GitHub Releases.
+
+Release process:
+
+1. Update the plugin header version, `Ven_Agency_Support::VERSION`, and `readme.txt` stable tag/changelog.
+2. Run `npm run plugin:lint`.
+3. Commit and push to `main`.
+4. Create a GitHub release such as `v1.3.4`.
+5. The release workflow attaches `ven-agency-support.zip` to the release.
+6. WordPress will surface the update on the Plugins screen during its next update check.
+
+Manual release ZIP:
+
+```sh
+npm run plugin:zip
+gh release create v1.3.4 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.4" --notes "Release notes"
+```
+
+## Client Website Repositories
+
+Client website repositories should not own the support assistant internals. They should:
+
+- install the released plugin ZIP,
+- define `VEN_SUPPORT_GATEWAY_URL`,
+- define the client-specific `VEN_SUPPORT_SITE_ID`,
+- store the client-specific `VEN_SUPPORT_SITE_SECRET` securely,
+- leave AI, ClickUp, site authorisation, and feature flags in the Ven-managed Worker.
+
+This keeps client site work focused on the client website while support assistant development stays in this repository.
