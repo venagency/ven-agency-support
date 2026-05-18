@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.3.8
+ * Version: 1.3.9
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.3.8';
+	private const VERSION       = '1.3.9';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -1094,6 +1094,16 @@ CSS;
 			return '';
 		}
 	};
+	const navigationTargetUrl = function (action) {
+		if (!action || !['navigate_site', 'open_admin_screen'].includes(action.type)) return '';
+		return safeNavigationUrl(action.url || '');
+	};
+	const performNavigationAction = function (action) {
+		const targetUrl = navigationTargetUrl(action);
+		if (!targetUrl) return false;
+		window.location.assign(targetUrl);
+		return true;
+	};
 	const readableText = function (element) {
 		return (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 180);
 	};
@@ -1226,30 +1236,20 @@ CSS;
 
 		const detail = document.createElement('p');
 		if (action.type === 'open_admin_screen') {
-			detail.textContent = action.reason || 'Open this WordPress screen to continue.';
-			const link = document.createElement('a');
-			link.href = action.url || '#';
-			link.textContent = action.label || 'Open screen';
+			if (performNavigationAction(action)) return;
+			detail.textContent = action.reason || 'This WordPress screen is not available from here.';
 			node.appendChild(detail);
-			node.appendChild(link);
 		} else if (action.type === 'navigate_site') {
-			const targetUrl = safeNavigationUrl(action.url || '');
+			if (performNavigationAction(action)) return;
 			detail.textContent = action.reason || 'Taking you there now.';
 			const button = document.createElement('button');
 			button.type = 'button';
 			button.textContent = action.label || 'Open screen';
 			button.addEventListener('click', function () {
-				if (targetUrl) {
-					window.location.assign(targetUrl);
-				}
+				performNavigationAction(action);
 			});
 			node.appendChild(detail);
 			node.appendChild(button);
-			if (targetUrl) {
-				window.setTimeout(function () {
-					window.location.assign(targetUrl);
-				}, 650);
-			}
 		} else if (action.type === 'annotate_screen') {
 			detail.textContent = action.instructions || 'I can show you where to look on this screen.';
 			const button = document.createElement('button');
@@ -1406,6 +1406,14 @@ CSS;
 				const data = await response.json();
 				const last = messages ? messages.lastElementChild : null;
 				if (last && last.textContent === wait) last.remove();
+				if (data.success && Array.isArray(data.data.actions)) {
+					const navigationAction = data.data.actions.find(function (action) {
+						return navigationTargetUrl(action);
+					});
+					if (navigationAction && performNavigationAction(navigationAction)) {
+						return;
+					}
+				}
 				addMessage('assistant', data.success ? data.data.reply : (data.data && data.data.message ? data.data.message : 'Ven support is unavailable.'));
 				if (data.success && Array.isArray(data.data.actions)) {
 					data.data.actions.forEach(addAction);

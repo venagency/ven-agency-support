@@ -12,7 +12,7 @@ const aiTool = (name, description, parameters) => ({
 const VEN_SUPPORT_TOOLS = [
 	aiTool(
 		'open_admin_screen',
-		'Suggest opening a safe WordPress admin screen that can help the user complete the task.',
+		'Navigate to a safe WordPress admin screen. Prefer navigate_site for new navigation requests.',
 		{
 			type: 'object',
 			properties: {
@@ -300,7 +300,7 @@ async function createAiReply(env, site, payload) {
 	const history = Array.isArray(payload.history) ? payload.history.slice(-8) : [];
 	const systemPrompt = [
 		site.aiInstructions || 'You are Ven Agency website support. Help the logged-in website user troubleshoot WordPress content, forms, pages, and website issues. Keep replies concise. If the issue needs implementation work or a Ven team member should investigate, call create_support_ticket.',
-		'You may use tools to suggest safe next actions. When the user asks you to take them to a WordPress admin screen or frontend page, call navigate_site with a same-site relative path. Use annotate_screen when it would help to point at a visible item from the provided screen context. For data updates, call update_post_data only for WordPress post/page title, content, or excerpt updates with exact new values; the user must confirm before WordPress applies the update. Never claim you have changed WordPress content directly unless a returned update action has been confirmed by WordPress. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
+		'You may use tools to suggest safe next actions. When the user asks you to take them, move them, open a WordPress screen, or go to a frontend page, call navigate_site with a same-site relative path and do not merely suggest a link. Use annotate_screen when it would help to point at a visible item from the provided screen context. For data updates, call update_post_data only for WordPress post/page title, content, or excerpt updates with exact new values; the user must confirm before WordPress applies the update. Never claim you have changed WordPress content directly unless a returned update action has been confirmed by WordPress. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
 		payload.context ? `Current WordPress context: ${JSON.stringify(safeContext(payload.context)).slice(0, 4500)}` : '',
 	].filter(Boolean).join('\n\n');
 	const messages = [
@@ -452,9 +452,10 @@ async function toolCallToAction(call, payload, env, site) {
 		}
 
 		return {
-			type: 'open_admin_screen',
+			type: 'navigate_site',
 			label: String(args.label || 'Open admin screen').slice(0, 80),
 			url,
+			area: 'admin',
 			reason: String(args.reason || '').slice(0, 240),
 		};
 	}
