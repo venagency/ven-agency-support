@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.3.1
+ * Version: 1.3.2
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.3.1';
+	private const VERSION       = '1.3.2';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -809,14 +809,14 @@ final class Ven_Agency_Support {
 .ven-support-assistant__launcher { align-items: center; background: #111214; border: 1px solid rgba(255,255,255,.14); border-radius: var(--ven-support-radius); box-shadow: 0 16px 44px rgba(0,0,0,.26); cursor: pointer; display: flex; height: 38px; justify-content: center; padding: 0; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; width: 38px; }
 .ven-support-assistant__launcher:hover, .ven-support-assistant__launcher:focus { border-color: rgba(255,255,255,.32); box-shadow: 0 20px 54px rgba(0,0,0,.34); transform: translateY(-1px); }
 .ven-support-assistant__launcher img { display: block; height: auto; width: 14px; }
-.ven-support-assistant__window { background: linear-gradient(180deg, #191a1d 0%, #111214 100%); border: 1px solid rgba(255,255,255,.12); border-radius: var(--ven-support-radius); bottom: 56px; box-shadow: 0 28px 90px rgba(0,0,0,.32); max-height: calc(100vh - 96px); overflow: auto; padding: 18px; position: absolute; right: 0; width: min(430px, calc(100vw - 48px)); }
-.ven-support-assistant__head { align-items: center; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 16px; }
+.ven-support-assistant__window { background: linear-gradient(180deg, #171719 0%, #0d0e10 100%); border: 1px solid rgba(255,255,255,.12); border-radius: var(--ven-support-radius); bottom: 56px; box-shadow: 0 28px 90px rgba(0,0,0,.32); max-height: calc(100vh - 96px); overflow: auto; padding: 24px; position: absolute; right: 0; width: min(420px, calc(100vw - 48px)); }
+.ven-support-assistant__head { align-items: center; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 20px; }
 .ven-support-assistant__close { align-items: center; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.08); border-radius: var(--ven-support-radius); color: rgba(255,255,255,.78); cursor: pointer; display: flex; font-size: 20px; height: 32px; justify-content: center; line-height: 1; padding: 0; transition: background .16s ease, color .16s ease; width: 32px; }
 .ven-support-assistant__close:hover, .ven-support-assistant__close:focus { background: rgba(255,255,255,.14); color: #fff; }
 .ven-support-assistant__logo { display: block; height: auto; margin: 0; max-width: 94px; width: 94px; }
-.ven-support-assistant__hero { margin: 0 0 18px; }
-.ven-support-assistant__hero h2 { color: #fff; font-size: 27px; font-weight: 560; letter-spacing: 0; line-height: 1.08; margin: 0 0 9px; }
-.ven-support-assistant__hero span { color: rgba(255,255,255,.62); display: block; font-size: 13px; line-height: 1.45; }
+.ven-support-assistant__hero { margin: 0 0 22px; }
+.ven-support-assistant__hero h2 { color: #fff; font-size: 30px; font-weight: 520; letter-spacing: 0; line-height: 1.08; margin: 0 0 10px; }
+.ven-support-assistant__hero span { color: rgba(255,255,255,.56); display: block; font-size: 14px; line-height: 1.45; }
 .ven-support-assistant__loading { align-items: flex-start; display: flex; flex-direction: column; min-height: 220px; justify-content: center; }
 .ven-support-assistant__loading[hidden], .ven-support-assistant__app[hidden] { display: none !important; }
 .ven-support-assistant__spinner { animation: venSpin .8s linear infinite; border: 2px solid rgba(255,255,255,.2); border-top-color: #fff; border-radius: 999px; height: 28px; margin: 0 0 14px; width: 28px; }
@@ -825,11 +825,12 @@ final class Ven_Agency_Support {
 .ven-support-assistant__tabs button { background: transparent; border: 0; border-radius: var(--ven-support-radius); color: rgba(255,255,255,.62); cursor: pointer; flex: 1; font-weight: 700; padding: 8px 10px; }
 .ven-support-assistant__tabs button.is-active { background: rgba(255,255,255,.14); color: #fff; }
 .ven-support-assistant__panel { display: none; }
-.ven-support-assistant__panel.is-active { display: block; }
-.ven-support-assistant__messages { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 100%); background: transparent; border: 0; display: flex; flex-direction: column; gap: 10px; margin: 0; mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 100%); max-height: 230px; min-height: 150px; overflow: auto; padding: 0; }
-.ven-support-assistant__message { border-radius: var(--ven-support-radius); font-size: 13px; line-height: 1.45; padding: 10px 12px; }
+.ven-support-assistant__panel.is-active { display: grid; gap: 16px; }
+.ven-support-assistant__messages { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 30px, #000 100%); background: transparent; border: 0; display: flex; flex-direction: column; gap: 10px; margin: 0; mask-image: linear-gradient(to bottom, transparent 0, #000 30px, #000 100%); max-height: 230px; min-height: 128px; overflow: auto; padding: 0; }
+.ven-support-assistant__messages:empty { display: none; min-height: 0; }
+.ven-support-assistant__message { border-radius: var(--ven-support-radius); font-size: 13px; line-height: 1.45; padding: 10px 14px; }
 .ven-support-assistant__message--user { align-self: flex-end; background: #fff; color: #111214; max-width: 86%; }
-.ven-support-assistant__message--assistant { align-self: flex-start; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.88); max-width: 92%; }
+.ven-support-assistant__message--assistant { align-self: flex-start; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.88); max-width: 92%; }
 .ven-support-assistant__action { align-self: stretch; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.10); border-radius: var(--ven-support-radius); color: rgba(255,255,255,.68); line-height: 1.45; padding: 11px 12px; }
 .ven-support-assistant__action strong { color: #fff; display: block; margin-bottom: 4px; }
 .ven-support-assistant__action p { margin: 0 0 8px; }
@@ -840,10 +841,10 @@ final class Ven_Agency_Support {
 .ven-support-assistant input[type="text"], .ven-support-assistant input[type="email"], .ven-support-assistant textarea { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: var(--ven-support-radius); box-sizing: border-box; color: #fff; max-width: 100%; outline: none; width: 100%; }
 .ven-support-assistant input[type="text"]:focus, .ven-support-assistant input[type="email"]:focus, .ven-support-assistant textarea:focus { border-color: rgba(255,255,255,.34); box-shadow: 0 0 0 2px rgba(255,255,255,.08); }
 .ven-support-assistant textarea { min-height: 92px; }
-.ven-support-assistant__chat-form { align-items: flex-end; background: #252527; border: 1px solid rgba(255,255,255,.10); border-radius: var(--ven-support-radius); display: flex; gap: 10px; padding: 8px 8px 8px 16px; }
-.ven-support-assistant__chat-form textarea { background: transparent; border: 0; border-radius: 0; box-shadow: none !important; color: #f6f7f9; flex: 1; min-height: 40px; padding: 10px 0; resize: none; }
+.ven-support-assistant__chat-form { align-items: flex-end; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: var(--ven-support-radius); box-shadow: inset 0 1px 0 rgba(255,255,255,.04); display: flex; gap: 10px; padding: 12px 12px 12px 18px; }
+.ven-support-assistant__chat-form textarea { background: transparent; border: 0; border-radius: 0; box-shadow: none !important; color: #f6f7f9; flex: 1; min-height: 48px; padding: 10px 0; resize: none; }
 .ven-support-assistant__chat-form textarea::placeholder { color: rgba(255,255,255,.46); }
-.ven-support-assistant__chat-form .button.button-primary { border-radius: var(--ven-support-radius); flex: 0 0 40px; font-size: 0; height: 40px; min-height: 40px; padding: 0; position: relative; width: 40px; }
+.ven-support-assistant__chat-form .button.button-primary { align-items: center; border-radius: var(--ven-support-radius); display: inline-flex; flex: 0 0 42px; font-size: 0; height: 42px; justify-content: center; min-height: 42px; padding: 0; position: relative; width: 42px; }
 .ven-support-assistant__chat-form .button.button-primary::after { content: "→"; font-size: 22px; font-weight: 500; line-height: 1; }
 .ven-support-assistant__upload { cursor: pointer; }
 .ven-support-assistant__file-input { height: 1px; opacity: 0; overflow: hidden; position: absolute; width: 1px; }
@@ -955,10 +956,6 @@ CSS;
 		messages.appendChild(node);
 		messages.scrollTop = messages.scrollHeight;
 	};
-
-	if (messages) {
-		addMessage('assistant', 'Hi, I can help with website support questions or help you create a task for Ven.');
-	}
 
 	root.querySelectorAll('[data-ven-tab]').forEach(function (tab) {
 		tab.addEventListener('click', function () {
