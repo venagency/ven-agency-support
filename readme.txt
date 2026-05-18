@@ -4,7 +4,7 @@ Tags: support, admin, chatbot
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.3.2
+Stable tag: 1.3.3
 License: GPLv2 or later
 
 Ven Agency support assistant for authorised WordPress websites.
@@ -22,6 +22,9 @@ WordPress handles the authenticated admin UI, signed requests, support uploads, 
 3. Configure `VEN_SUPPORT_GATEWAY_URL`, `VEN_SUPPORT_SITE_ID`, and `VEN_SUPPORT_SITE_SECRET`.
 
 == Changelog ==
+
+= 1.3.3 =
+* Reduces the support popup scale by roughly ten percent and gives the chat area a fixed-height frame.
 
 = 1.3.2 =
 * Refines the chat surface to follow a cleaner command-style support design.
