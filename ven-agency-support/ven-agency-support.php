@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.2.2
+ * Version: 1.2.3
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.2.2';
+	private const VERSION       = '1.2.3';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -799,12 +799,13 @@ final class Ven_Agency_Support {
 		return <<<'CSS'
 .ven-support-assistant { bottom: 24px; color: rgba(255,255,255,.82); position: fixed; right: 24px; z-index: 100000; }
 .ven-support-assistant__launcher { align-items: center; background: #0f1216; border: 0; border-radius: 999px; box-shadow: 0 18px 48px rgba(15,18,22,.28); cursor: pointer; display: flex; height: 64px; justify-content: center; padding: 0; width: 64px; }
-.ven-support-assistant__launcher img { display: block; height: auto; width: 42px; }
+.ven-support-assistant__launcher img { display: block; height: auto; width: 32px; }
 .ven-support-assistant__window { background: #0f1216; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; bottom: 78px; box-shadow: 0 24px 80px rgba(15,18,22,.34); max-height: calc(100vh - 132px); overflow: auto; padding: 22px; position: absolute; right: 0; width: min(420px, calc(100vw - 48px)); }
 .ven-support-assistant__head { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; }
 .ven-support-assistant__close { background: rgba(255,255,255,.08); border: 0; border-radius: 999px; color: #fff; cursor: pointer; font-size: 22px; height: 32px; line-height: 28px; padding: 0; width: 32px; }
 .ven-support-assistant__logo { display: block; height: auto; margin: 0 0 18px; max-width: 128px; width: 128px; }
 .ven-support-assistant__loading { align-items: flex-start; display: flex; flex-direction: column; min-height: 220px; justify-content: center; }
+.ven-support-assistant__loading[hidden], .ven-support-assistant__app[hidden] { display: none !important; }
 .ven-support-assistant__spinner { animation: venSpin .8s linear infinite; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 999px; height: 28px; margin: 0 0 14px; width: 28px; }
 @keyframes venSpin { to { transform: rotate(360deg); } }
 .ven-support-assistant__intro { color: rgba(255,255,255,.72); margin: 0 0 18px; }
@@ -856,8 +857,14 @@ CSS;
 	const win = root.querySelector('[data-ven-window]');
 	const loading = root.querySelector('[data-ven-loading]');
 	const app = root.querySelector('[data-ven-app]');
-	if (loading) loading.hidden = true;
-	if (app) app.hidden = false;
+	if (loading) {
+		loading.hidden = true;
+		loading.style.display = 'none';
+	}
+	if (app) {
+		app.hidden = false;
+		app.style.display = '';
+	}
 	const toggle = function (open) {
 		if (!win || !launcher) return;
 		win.hidden = !open;
