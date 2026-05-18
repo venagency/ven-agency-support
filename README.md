@@ -204,7 +204,7 @@ Release process:
 1. Update the plugin header version, `Ven_Agency_Support::VERSION`, and `readme.txt` stable tag/changelog.
 2. Run `npm run plugin:lint`.
 3. Commit and push to `main`.
-4. Create a GitHub release such as `v1.3.5`.
+4. Create a GitHub release such as `v1.3.6`.
 5. The release workflow attaches `ven-agency-support.zip` to the release.
 6. WordPress will surface the update on the Plugins screen during its next update check.
 
@@ -212,7 +212,7 @@ Manual release ZIP:
 
 ```sh
 npm run plugin:zip
-gh release create v1.3.5 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.5" --notes "Release notes"
+gh release create v1.3.6 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.6" --notes "Release notes"
 ```
 
 ## Client Website Repositories
