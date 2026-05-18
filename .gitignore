@@ -2,3 +2,6 @@
 ven-agency-support.zip
 node_modules/
 vendor/
+.wp-env.override.json
+cloudflare/ven-support-task-gateway/.dev.vars
+cloudflare/ven-support-task-gateway/.wrangler/

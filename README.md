@@ -124,13 +124,60 @@ Future page-changing tools should be implemented as narrow, signed, capability-g
 
 ## Local Development
 
-Run the Worker locally:
+Install the project tools:
+
+```sh
+npm install
+```
+
+Prepare local-only WordPress and Worker configuration:
+
+```sh
+npm run local:setup
+```
+
+This creates or updates ignored local files:
+
+- `.wp-env.override.json` - WordPress constants for the local test site.
+- `cloudflare/ven-support-task-gateway/.dev.vars` - local Worker authorisation config.
+
+The setup script generates a local shared secret and keeps it in those ignored files. Do not commit either file. Do not add fake ClickUp, AI, or client credentials. Add real development credentials to `.dev.vars` only when intentionally testing chat AI responses or ClickUp task creation.
+
+Start the local Worker gateway in one terminal:
 
 ```sh
 npm run worker:dev
 ```
 
-Lint the plugin PHP:
+The Worker dev server listens on `8796` by default so it stays separate from other local services.
+
+Start WordPress in a second terminal:
+
+```sh
+npm run wp:start
+```
+
+The local WordPress admin is available at `http://localhost:8896/wp-admin/` with the default `wp-env` username `admin` and password `password`. The `ven-agency-support/` plugin is loaded by `.wp-env.json`; if you need to reactivate it manually, run:
+
+```sh
+npm run wp:activate
+```
+
+Check the plugin status:
+
+```sh
+npm run wp:verify
+```
+
+Stop WordPress:
+
+```sh
+npm run wp:stop
+```
+
+If you change the WordPress or Worker port, rerun `npm run local:setup` with `VEN_SUPPORT_LOCAL_WORDPRESS_URL`, `VEN_SUPPORT_LOCAL_GATEWAY_URL`, or `VEN_SUPPORT_LOCAL_SITE_ID` set to the exact local values you are using.
+
+Lint the plugin PHP through the wp-env CLI container:
 
 ```sh
 npm run plugin:lint
@@ -157,7 +204,7 @@ Release process:
 1. Update the plugin header version, `Ven_Agency_Support::VERSION`, and `readme.txt` stable tag/changelog.
 2. Run `npm run plugin:lint`.
 3. Commit and push to `main`.
-4. Create a GitHub release such as `v1.3.4`.
+4. Create a GitHub release such as `v1.3.5`.
 5. The release workflow attaches `ven-agency-support.zip` to the release.
 6. WordPress will surface the update on the Plugins screen during its next update check.
 
@@ -165,7 +212,7 @@ Manual release ZIP:
 
 ```sh
 npm run plugin:zip
-gh release create v1.3.4 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.4" --notes "Release notes"
+gh release create v1.3.5 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.5" --notes "Release notes"
 ```
 
 ## Client Website Repositories
