@@ -81,7 +81,7 @@ Add a site entry to the `AUTHORIZED_SITES` Worker secret.
     "title": "Ven Support",
     "intro": "Ask Ven for help with this website.",
     "aiModel": "@cf/google/gemma-4-26b-a4b-it",
-    "aiInstructions": "You are Ven Agency website support. Keep replies concise, navigate users to safe same-site WordPress screens when helpful, and create a support ticket when Ven implementation work is needed."
+    "aiInstructions": "You are Ven Agency website support. Keep replies concise, use screen annotations to show users what to do, navigate users to safe same-site WordPress screens when helpful, prepare confirmed post/page updates when the user asks for exact data changes, and create a support ticket when Ven implementation work is needed."
   }
 }
 ```
@@ -96,8 +96,9 @@ Set `enabled` to `false` to remotely hide the assistant for a site after the plu
 2. The plugin renders the assistant only when the Worker says the site is enabled.
 3. Chat requests are signed with `HMAC-SHA256(timestamp.body)`.
 4. The Worker verifies site ID, timestamp freshness, signature, and allowed origin.
-5. Chat requests are routed through Ven-controlled AI.
-6. If the AI determines Ven team follow-up is needed, the Worker creates a ClickUp task in the configured list.
+5. Chat requests include sanitized screen context such as visible headings, controls, links, and element positions.
+6. Chat requests are routed through Ven-controlled AI.
+7. If the AI determines Ven team follow-up is needed, the Worker creates a ClickUp task in the configured list.
 
 ## Security Model
 
@@ -107,7 +108,8 @@ Set `enabled` to `false` to remotely hide the assistant for a site after the plu
 - Temporary WordPress access is not granted by the chat assistant.
 - The access user uses `dev@ven.com.au`.
 - The assistant does not execute arbitrary PHP, SQL, JavaScript, shell commands, or filesystem writes.
-- AI tool calls either render suggested actions or create a ClickUp support task through the Worker.
+- AI tool calls render suggested actions, draw screen annotations, prepare confirmed post/page updates, or create a ClickUp support task through the Worker.
+- Data updates are limited to post/page title, content, and excerpt fields and still require the logged-in user to confirm the action in WordPress.
 
 ## AI And Tool Use
 
@@ -115,10 +117,12 @@ The current Worker exposes these safe tools to the AI layer:
 
 - `open_admin_screen` - suggests a safe WordPress admin URL.
 - `navigate_site` - navigates the current browser to a safe same-site WordPress admin or frontend path.
+- `annotate_screen` - highlights a visible element from the sanitized screen context.
 - `propose_page_change` - drafts a page/content change for user review.
+- `update_post_data` - prepares a confirmed post/page title, content, or excerpt update.
 - `create_support_ticket` - creates a ClickUp task for Ven team follow-up when implementation work is needed.
 
-The current WordPress plugin renders returned tool calls as actions. It does not directly apply content changes.
+The current WordPress plugin renders returned tool calls as actions. Data updates are applied only after the logged-in WordPress user clicks the confirmation button and passes the relevant WordPress capability check.
 
 Future page-changing tools should be implemented as narrow, signed, capability-gated WordPress endpoints with user confirmation and a rollback path.
 
@@ -204,7 +208,7 @@ Release process:
 1. Update the plugin header version, `Ven_Agency_Support::VERSION`, and `readme.txt` stable tag/changelog.
 2. Run `npm run plugin:lint`.
 3. Commit and push to `main`.
-4. Create a GitHub release such as `v1.3.8`.
+4. Create a GitHub release such as `v1.3.9`.
 5. The release workflow attaches `ven-agency-support.zip` to the release.
 6. WordPress will surface the update on the Plugins screen during its next update check.
 
@@ -212,7 +216,7 @@ Manual release ZIP:
 
 ```sh
 npm run plugin:zip
-gh release create v1.3.8 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.8" --notes "Release notes"
+gh release create v1.3.9 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.9" --notes "Release notes"
 ```
 
 ## Client Website Repositories

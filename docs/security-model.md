@@ -8,7 +8,7 @@ WordPress is trusted to:
 
 - confirm the user is logged in,
 - check WordPress capabilities,
-- pass safe admin context to the gateway,
+- pass safe admin context and sanitized visible screen context to the gateway,
 - sign requests with the site secret.
 
 Cloudflare is trusted to:
@@ -47,8 +47,12 @@ Current tools can:
 
 - open an admin screen,
 - navigate the current browser to a same-site WordPress admin or frontend path,
+- annotate a visible screen element from sanitized screen context,
 - propose a content change,
+- prepare confirmed post/page title, content, or excerpt updates,
 - create a ClickUp support task when the AI determines Ven team follow-up is needed.
+
+Post/page updates are applied only by WordPress after a user clicks the confirmation button and passes `edit_post` capability checks. The Worker never receives WordPress write credentials.
 
 Future mutating tools must include:
 

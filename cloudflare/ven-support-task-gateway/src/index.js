@@ -60,6 +60,32 @@ const VEN_SUPPORT_TOOLS = [
 		}
 	),
 	aiTool(
+		'annotate_screen',
+		'Highlight a visible element on the user screen and explain what to do next.',
+		{
+			type: 'object',
+			properties: {
+				selector: {
+					type: 'string',
+					description: 'A selector from the provided screen context, such as [data-ven-screen-id="ven-screen-3"].',
+				},
+				label: {
+					type: 'string',
+					description: 'Short label shown near the highlighted element.',
+				},
+				instructions: {
+					type: 'string',
+					description: 'Concise instruction for what the user should do with this element.',
+				},
+				placement: {
+					type: 'string',
+					enum: ['top', 'right', 'bottom', 'left'],
+				},
+			},
+			required: ['selector', 'label', 'instructions'],
+		}
+	),
+	aiTool(
 		'propose_page_change',
 		'Draft a page or content change for the user to review before any WordPress content is changed.',
 		{
@@ -83,6 +109,45 @@ const VEN_SUPPORT_TOOLS = [
 				},
 			},
 			required: ['target', 'changeSummary'],
+		}
+	),
+	aiTool(
+		'update_post_data',
+		'Prepare a confirmed WordPress post or page update for title, content, or excerpt when the user explicitly asks for an exact data change.',
+		{
+			type: 'object',
+			properties: {
+				postId: {
+					type: 'integer',
+					description: 'The WordPress post or page ID to update.',
+				},
+				postType: {
+					type: 'string',
+					description: 'The WordPress post type, such as page or post.',
+				},
+				summary: {
+					type: 'string',
+					description: 'Short summary of the update the user will confirm.',
+				},
+				fields: {
+					type: 'object',
+					properties: {
+						title: {
+							type: 'string',
+							description: 'New post title.',
+						},
+						content: {
+							type: 'string',
+							description: 'New post content. Include the full replacement content.',
+						},
+						excerpt: {
+							type: 'string',
+							description: 'New post excerpt.',
+						},
+					},
+				},
+			},
+			required: ['postId', 'summary', 'fields'],
 		}
 	),
 	aiTool(
@@ -235,8 +300,8 @@ async function createAiReply(env, site, payload) {
 	const history = Array.isArray(payload.history) ? payload.history.slice(-8) : [];
 	const systemPrompt = [
 		site.aiInstructions || 'You are Ven Agency website support. Help the logged-in website user troubleshoot WordPress content, forms, pages, and website issues. Keep replies concise. If the issue needs implementation work or a Ven team member should investigate, call create_support_ticket.',
-		'You may use tools to suggest safe next actions. When the user asks you to take them to a WordPress admin screen or frontend page, call navigate_site with a same-site relative path. Never claim you have changed WordPress content directly. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
-		payload.context ? `Current WordPress context: ${JSON.stringify(safeContext(payload.context)).slice(0, 1200)}` : '',
+		'You may use tools to suggest safe next actions. When the user asks you to take them to a WordPress admin screen or frontend page, call navigate_site with a same-site relative path. Use annotate_screen when it would help to point at a visible item from the provided screen context. For data updates, call update_post_data only for WordPress post/page title, content, or excerpt updates with exact new values; the user must confirm before WordPress applies the update. Never claim you have changed WordPress content directly unless a returned update action has been confirmed by WordPress. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
+		payload.context ? `Current WordPress context: ${JSON.stringify(safeContext(payload.context)).slice(0, 4500)}` : '',
 	].filter(Boolean).join('\n\n');
 	const messages = [
 		{
@@ -410,6 +475,21 @@ async function toolCallToAction(call, payload, env, site) {
 		};
 	}
 
+	if ('annotate_screen' === name) {
+		const selector = String(args.selector || '').slice(0, 160);
+		if (!selector) {
+			return null;
+		}
+
+		return {
+			type: 'annotate_screen',
+			label: String(args.label || 'Look here').slice(0, 80),
+			selector,
+			instructions: String(args.instructions || '').slice(0, 320),
+			placement: ['top', 'right', 'bottom', 'left'].includes(args.placement) ? args.placement : 'bottom',
+		};
+	}
+
 	if ('propose_page_change' === name) {
 		return {
 			type: 'propose_page_change',
@@ -418,6 +498,23 @@ async function toolCallToAction(call, payload, env, site) {
 			changeSummary: String(args.changeSummary || '').slice(0, 500),
 			proposedText: String(args.proposedText || '').slice(0, 1500),
 			reason: String(args.reason || '').slice(0, 300),
+		};
+	}
+
+	if ('update_post_data' === name) {
+		const fields = updatePostFields(args.fields || {});
+		const postId = Number(args.postId);
+		if (!Number.isInteger(postId) || postId < 1 || !Object.keys(fields).length) {
+			return null;
+		}
+
+		return {
+			type: 'update_post_data',
+			label: 'Apply update',
+			summary: String(args.summary || 'Update WordPress data').slice(0, 240),
+			postId,
+			postType: String(args.postType || '').slice(0, 40),
+			fields,
 		};
 	}
 
@@ -465,6 +562,27 @@ function parseToolArguments(value) {
 	}
 
 	return 'object' === typeof value ? value : {};
+}
+
+function updatePostFields(fields) {
+	const clean = {};
+	if (!fields || 'object' !== typeof fields) {
+		return clean;
+	}
+
+	if ('string' === typeof fields.title) {
+		clean.title = fields.title.slice(0, 250);
+	}
+
+	if ('string' === typeof fields.content) {
+		clean.content = fields.content.slice(0, 12000);
+	}
+
+	if ('string' === typeof fields.excerpt) {
+		clean.excerpt = fields.excerpt.slice(0, 1000);
+	}
+
+	return clean;
 }
 
 function adminActionUrl(siteUrl, adminUrl, path) {
@@ -515,6 +633,40 @@ function safeContext(context) {
 		displayName: String(context.displayName || '').slice(0, 120),
 		userEmail: String(context.userEmail || '').slice(0, 160),
 		canManageOptions: Boolean(context.canManageOptions),
+		screen: safeScreenContext(context.screen),
+	};
+}
+
+function safeScreenContext(screen) {
+	if (!screen || 'object' !== typeof screen) {
+		return {};
+	}
+
+	const elements = Array.isArray(screen.elements) ? screen.elements.slice(0, 40).map((element) => ({
+		selector: String(element.selector || '').slice(0, 120),
+		tag: String(element.tag || '').slice(0, 20),
+		role: String(element.role || '').slice(0, 40),
+		label: String(element.label || '').slice(0, 180),
+		text: String(element.text || '').slice(0, 180),
+		href: String(element.href || '').slice(0, 260),
+		name: String(element.name || '').slice(0, 80),
+		type: String(element.type || '').slice(0, 40),
+		rect: element.rect && 'object' === typeof element.rect ? {
+			x: Number(element.rect.x) || 0,
+			y: Number(element.rect.y) || 0,
+			width: Number(element.rect.width) || 0,
+			height: Number(element.rect.height) || 0,
+		} : undefined,
+	})) : [];
+
+	return {
+		url: String(screen.url || '').slice(0, 300),
+		title: String(screen.title || '').slice(0, 180),
+		viewport: screen.viewport && 'object' === typeof screen.viewport ? {
+			width: Number(screen.viewport.width) || 0,
+			height: Number(screen.viewport.height) || 0,
+		} : undefined,
+		elements,
 	};
 }
 

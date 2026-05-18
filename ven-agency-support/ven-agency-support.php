@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.3.7
+ * Version: 1.3.8
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.3.7';
+	private const VERSION       = '1.3.8';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -27,6 +27,7 @@ final class Ven_Agency_Support {
 	private const CACHE_TTL     = 300;
 	private const AJAX_CHAT     = 'ven_support_chat';
 	private const AJAX_TICKET   = 'ven_support_ticket';
+	private const AJAX_UPDATE   = 'ven_support_apply_update';
 	private const NONCE_ACTION  = 'ven_support_assistant';
 	private const ACCESS_LOGIN  = 'ven-agency-support';
 	private const ACCESS_EMAIL  = 'dev@ven.com.au';
@@ -41,6 +42,7 @@ final class Ven_Agency_Support {
 		add_action( 'admin_footer', array( __CLASS__, 'render_support_launcher' ) );
 		add_action( 'wp_ajax_' . self::AJAX_CHAT, array( __CLASS__, 'ajax_chat' ) );
 		add_action( 'wp_ajax_' . self::AJAX_TICKET, array( __CLASS__, 'ajax_ticket' ) );
+		add_action( 'wp_ajax_' . self::AJAX_UPDATE, array( __CLASS__, 'ajax_apply_update' ) );
 		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_expired_support_user' ), 10, 2 );
 		add_filter( 'admin_footer_text', array( __CLASS__, 'admin_footer_text' ) );
 		add_filter( 'pre_set_site_transient_update_plugins', array( __CLASS__, 'plugin_update_check' ) );
@@ -225,10 +227,11 @@ final class Ven_Agency_Support {
 	public static function ajax_chat(): void {
 		self::verify_ajax_request();
 
-		$user    = wp_get_current_user();
-		$screen  = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		$message = sanitize_textarea_field( wp_unslash( $_POST['message'] ?? '' ) );
-		$history = json_decode( wp_unslash( $_POST['history'] ?? '[]' ), true );
+		$user           = wp_get_current_user();
+		$current_screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		$message        = sanitize_textarea_field( wp_unslash( $_POST['message'] ?? '' ) );
+		$history        = json_decode( wp_unslash( $_POST['history'] ?? '[]' ), true );
+		$screen_context = json_decode( wp_unslash( $_POST['screen_context'] ?? '{}' ), true );
 		if ( ! $message ) {
 			wp_send_json_error( array( 'message' => 'Please enter a message.' ), 400 );
 		}
@@ -236,11 +239,12 @@ final class Ven_Agency_Support {
 		$context = array(
 			'currentUrl'       => esc_url_raw( wp_unslash( $_POST['current_url'] ?? '' ) ),
 			'pageTitle'        => sanitize_text_field( wp_unslash( $_POST['page_title'] ?? '' ) ),
-			'screenId'         => $screen ? $screen->id : '',
+			'screenId'         => $current_screen ? $current_screen->id : '',
 			'userLogin'        => $user->user_login,
 			'displayName'      => $user->display_name,
 			'userEmail'        => $user->user_email,
 			'canManageOptions' => current_user_can( 'manage_options' ),
+			'screen'           => self::sanitize_screen_context( $screen_context ),
 		);
 
 		$result = self::remote_request(
@@ -323,6 +327,53 @@ final class Ven_Agency_Support {
 		);
 	}
 
+	public static function ajax_apply_update(): void {
+		self::verify_ajax_request();
+
+		$update = json_decode( wp_unslash( $_POST['update'] ?? '{}' ), true );
+		if ( ! is_array( $update ) || 'update_post_data' !== sanitize_key( $update['type'] ?? '' ) ) {
+			wp_send_json_error( array( 'message' => 'This update is not supported.' ), 400 );
+		}
+
+		$post_id = absint( $update['postId'] ?? 0 );
+		$post    = $post_id ? get_post( $post_id ) : null;
+		if ( ! $post ) {
+			wp_send_json_error( array( 'message' => 'The WordPress item could not be found.' ), 404 );
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			wp_send_json_error( array( 'message' => 'You are not allowed to update this item.' ), 403 );
+		}
+
+		$fields = self::sanitize_update_fields( $update['fields'] ?? array() );
+		if ( empty( $fields ) ) {
+			wp_send_json_error( array( 'message' => 'There are no supported fields to update.' ), 400 );
+		}
+
+		$data = array( 'ID' => $post_id );
+		if ( array_key_exists( 'title', $fields ) ) {
+			$data['post_title'] = $fields['title'];
+		}
+		if ( array_key_exists( 'content', $fields ) ) {
+			$data['post_content'] = $fields['content'];
+		}
+		if ( array_key_exists( 'excerpt', $fields ) ) {
+			$data['post_excerpt'] = $fields['excerpt'];
+		}
+
+		$result = wp_update_post( wp_slash( $data ), true );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ), 500 );
+		}
+
+		wp_send_json_success(
+			array(
+				'message' => sprintf( 'Updated %s.', sanitize_text_field( get_the_title( $post_id ) ) ),
+				'editUrl' => esc_url_raw( get_edit_post_link( $post_id, 'raw' ) ?: '' ),
+			)
+		);
+	}
+
 	public static function maybe_support_login(): void {
 		$token = sanitize_text_field( wp_unslash( $_GET['ven_support_access'] ?? '' ) );
 		if ( ! $token ) {
@@ -399,6 +450,7 @@ final class Ven_Agency_Support {
 					'nonce'          => wp_create_nonce( self::NONCE_ACTION ),
 					'chatAction'     => self::AJAX_CHAT,
 					'ticketAction'   => self::AJAX_TICKET,
+					'updateAction'   => self::AJAX_UPDATE,
 					'chatEnabled'    => ! empty( $settings['chatEnabled'] ),
 					'ticketsEnabled' => ! empty( $settings['ticketsEnabled'] ),
 				)
@@ -531,6 +583,17 @@ final class Ven_Agency_Support {
 				continue;
 			}
 
+			if ( 'annotate_screen' === $type ) {
+				$clean[] = array(
+					'type'         => $type,
+					'label'        => sanitize_text_field( $action['label'] ?? 'Look here' ),
+					'selector'     => sanitize_text_field( $action['selector'] ?? '' ),
+					'instructions' => sanitize_textarea_field( $action['instructions'] ?? '' ),
+					'placement'    => sanitize_key( $action['placement'] ?? 'bottom' ),
+				);
+				continue;
+			}
+
 			if ( 'propose_page_change' === $type ) {
 				$clean[] = array(
 					'type'          => $type,
@@ -554,6 +617,24 @@ final class Ven_Agency_Support {
 				continue;
 			}
 
+			if ( 'update_post_data' === $type ) {
+				$fields = self::sanitize_update_fields( $action['fields'] ?? array() );
+				$post_id = absint( $action['postId'] ?? 0 );
+				if ( empty( $fields ) || ! $post_id ) {
+					continue;
+				}
+
+				$clean[] = array(
+					'type'     => $type,
+					'label'    => sanitize_text_field( $action['label'] ?? 'Apply update' ),
+					'summary'  => sanitize_textarea_field( $action['summary'] ?? '' ),
+					'postId'   => $post_id,
+					'postType' => sanitize_key( $action['postType'] ?? '' ),
+					'fields'   => $fields,
+				);
+				continue;
+			}
+
 			if ( 'support_ticket_created' === $type || 'support_ticket_failed' === $type ) {
 				$clean[] = array(
 					'type'    => $type,
@@ -565,6 +646,67 @@ final class Ven_Agency_Support {
 					'taskUrl' => esc_url_raw( $action['taskUrl'] ?? '' ),
 				);
 			}
+		}
+
+		return $clean;
+	}
+
+	private static function sanitize_update_fields( $fields ): array {
+		if ( ! is_array( $fields ) ) {
+			return array();
+		}
+
+		$clean = array();
+		if ( array_key_exists( 'title', $fields ) ) {
+			$clean['title'] = sanitize_text_field( (string) $fields['title'] );
+		}
+		if ( array_key_exists( 'content', $fields ) ) {
+			$clean['content'] = wp_kses_post( (string) $fields['content'] );
+		}
+		if ( array_key_exists( 'excerpt', $fields ) ) {
+			$clean['excerpt'] = sanitize_textarea_field( (string) $fields['excerpt'] );
+		}
+
+		return $clean;
+	}
+
+	private static function sanitize_screen_context( $screen ): array {
+		if ( ! is_array( $screen ) ) {
+			return array();
+		}
+
+		$clean = array(
+			'url'      => esc_url_raw( $screen['url'] ?? '' ),
+			'title'    => sanitize_text_field( $screen['title'] ?? '' ),
+			'viewport' => array(
+				'width'  => absint( $screen['viewport']['width'] ?? 0 ),
+				'height' => absint( $screen['viewport']['height'] ?? 0 ),
+			),
+			'elements' => array(),
+		);
+
+		$elements = is_array( $screen['elements'] ?? null ) ? array_slice( $screen['elements'], 0, 40 ) : array();
+		foreach ( $elements as $element ) {
+			if ( ! is_array( $element ) ) {
+				continue;
+			}
+
+			$clean['elements'][] = array(
+				'selector' => sanitize_text_field( $element['selector'] ?? '' ),
+				'tag'      => sanitize_key( $element['tag'] ?? '' ),
+				'role'     => sanitize_text_field( $element['role'] ?? '' ),
+				'label'    => sanitize_text_field( $element['label'] ?? '' ),
+				'text'     => sanitize_text_field( $element['text'] ?? '' ),
+				'href'     => esc_url_raw( $element['href'] ?? '' ),
+				'name'     => sanitize_text_field( $element['name'] ?? '' ),
+				'type'     => sanitize_key( $element['type'] ?? '' ),
+				'rect'     => array(
+					'x'      => (int) ( $element['rect']['x'] ?? 0 ),
+					'y'      => (int) ( $element['rect']['y'] ?? 0 ),
+					'width'  => (int) ( $element['rect']['width'] ?? 0 ),
+					'height' => (int) ( $element['rect']['height'] ?? 0 ),
+				),
+			);
 		}
 
 		return $clean;
@@ -872,6 +1014,12 @@ final class Ven_Agency_Support {
 .ven-support-assistant__action p { margin: 0 0 8px; }
 .ven-support-assistant__action pre { background: rgba(0,0,0,.22); border-radius: var(--ven-support-radius); color: #fff; margin: 8px 0; max-height: 150px; overflow: auto; padding: 8px; white-space: pre-wrap; }
 .ven-support-assistant__action button, .ven-support-assistant__action a { align-items: center; background: #fff; border: 0; border-radius: var(--ven-support-radius); color: #111214; cursor: pointer; display: inline-flex; font-weight: 700; min-height: 30px; padding: 5px 12px; text-decoration: none; }
+.ven-support-assistant__action button[disabled] { cursor: wait; opacity: .64; }
+.ven-support-screen-highlight { border: 2px solid #1e8cff; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(8,13,20,.22), 0 0 0 5px rgba(30,140,255,.18); box-sizing: border-box; pointer-events: none; position: fixed; z-index: 100001; }
+.ven-support-screen-callout { background: #111214; border: 1px solid rgba(255,255,255,.18); border-radius: 14px; box-shadow: 0 18px 45px rgba(0,0,0,.28); box-sizing: border-box; color: #f6f7f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: min(320px, calc(100vw - 32px)); padding: 12px 14px; position: fixed; z-index: 100002; }
+.ven-support-screen-callout strong { display: block; font-size: 13px; margin: 0 24px 4px 0; }
+.ven-support-screen-callout p { color: rgba(255,255,255,.72); font-size: 13px; line-height: 1.42; margin: 0; }
+.ven-support-screen-callout button { align-items: center; background: rgba(255,255,255,.1); border: 0; border-radius: 999px; color: rgba(255,255,255,.8); cursor: pointer; display: flex; height: 22px; justify-content: center; padding: 0; position: absolute; right: 8px; top: 8px; width: 22px; }
 .ven-support-assistant label { display: block; margin: 0 0 14px; }
 .ven-support-assistant label span { color: rgba(255,255,255,.78); display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
 .ven-support-assistant input[type="text"], .ven-support-assistant input[type="email"], .ven-support-assistant textarea { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: var(--ven-support-radius); box-sizing: border-box; color: #fff; max-width: 100%; outline: none; width: 100%; }
@@ -946,6 +1094,119 @@ CSS;
 			return '';
 		}
 	};
+	const readableText = function (element) {
+		return (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+	};
+	const isVisibleElement = function (element) {
+		if (!element || root.contains(element) || element.closest('.ven-support-screen-highlight,.ven-support-screen-callout')) return false;
+		if (element.matches('input[type="hidden"],input[type="password"],script,style')) return false;
+		const rect = element.getBoundingClientRect();
+		const style = window.getComputedStyle(element);
+		return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && rect.bottom >= 0 && rect.right >= 0 && rect.top <= window.innerHeight && rect.left <= window.innerWidth;
+	};
+	const collectScreenContext = function () {
+		const selectors = [
+			'h1',
+			'h2',
+			'h3',
+			'.notice',
+			'[role="alert"]',
+			'a[href]',
+			'button',
+			'input:not([type="hidden"])',
+			'textarea',
+			'select',
+			'[role="button"]',
+			'[role="tab"]',
+			'[role="menuitem"]'
+		].join(',');
+		const elements = Array.from(document.querySelectorAll(selectors))
+			.filter(isVisibleElement)
+			.slice(0, 40)
+			.map(function (element, index) {
+				const screenId = 'ven-screen-' + index;
+				element.setAttribute('data-ven-screen-id', screenId);
+				const rect = element.getBoundingClientRect();
+				const label = element.getAttribute('aria-label') || element.getAttribute('title') || element.getAttribute('placeholder') || element.getAttribute('name') || readableText(element);
+				return {
+					selector: '[data-ven-screen-id="' + screenId + '"]',
+					tag: element.tagName.toLowerCase(),
+					role: element.getAttribute('role') || '',
+					label: String(label || '').replace(/\s+/g, ' ').trim().slice(0, 180),
+					text: readableText(element),
+					href: element.href || '',
+					name: element.getAttribute('name') || '',
+					type: element.getAttribute('type') || '',
+					rect: {
+						x: Math.round(rect.left),
+						y: Math.round(rect.top),
+						width: Math.round(rect.width),
+						height: Math.round(rect.height)
+					}
+				};
+			});
+
+		return {
+			url: window.location.href,
+			title: document.title || '',
+			viewport: {
+				width: window.innerWidth,
+				height: window.innerHeight
+			},
+			elements: elements
+		};
+	};
+	const clearAnnotation = function () {
+		document.querySelectorAll('.ven-support-screen-highlight,.ven-support-screen-callout').forEach(function (node) {
+			node.remove();
+		});
+	};
+	const showAnnotation = function (action) {
+		if (!action || !action.selector) return;
+		let target = null;
+		try {
+			target = document.querySelector(action.selector);
+		} catch (error) {
+			return;
+		}
+		if (!target || root.contains(target)) return;
+
+		clearAnnotation();
+		target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+		window.setTimeout(function () {
+			const rect = target.getBoundingClientRect();
+			const highlight = document.createElement('div');
+			highlight.className = 'ven-support-screen-highlight';
+			highlight.style.left = Math.max(8, rect.left - 6) + 'px';
+			highlight.style.top = Math.max(8, rect.top - 6) + 'px';
+			highlight.style.width = Math.max(24, rect.width + 12) + 'px';
+			highlight.style.height = Math.max(24, rect.height + 12) + 'px';
+
+			const callout = document.createElement('div');
+			callout.className = 'ven-support-screen-callout';
+			const title = document.createElement('strong');
+			title.textContent = action.label || 'Look here';
+			const closeButton = document.createElement('button');
+			closeButton.type = 'button';
+			closeButton.textContent = '×';
+			closeButton.setAttribute('aria-label', 'Dismiss highlight');
+			closeButton.addEventListener('click', clearAnnotation);
+			const text = document.createElement('p');
+			text.textContent = action.instructions || 'Use this item to continue.';
+			callout.appendChild(title);
+			callout.appendChild(closeButton);
+			callout.appendChild(text);
+
+			document.body.appendChild(highlight);
+			document.body.appendChild(callout);
+			const calloutRect = callout.getBoundingClientRect();
+			const preferredLeft = Math.min(window.innerWidth - calloutRect.width - 16, Math.max(16, rect.left));
+			const below = rect.bottom + 14;
+			const above = rect.top - calloutRect.height - 14;
+			callout.style.left = preferredLeft + 'px';
+			callout.style.top = (below + calloutRect.height + 16 <= window.innerHeight ? below : Math.max(16, above)) + 'px';
+		}, 280);
+	};
 	const addMessage = function (role, text) {
 		if (!messages || !text) return;
 		const node = document.createElement('div');
@@ -989,6 +1250,19 @@ CSS;
 					window.location.assign(targetUrl);
 				}, 650);
 			}
+		} else if (action.type === 'annotate_screen') {
+			detail.textContent = action.instructions || 'I can show you where to look on this screen.';
+			const button = document.createElement('button');
+			button.type = 'button';
+			button.textContent = action.label || 'Show me';
+			button.addEventListener('click', function () {
+				showAnnotation(action);
+			});
+			node.appendChild(detail);
+			node.appendChild(button);
+			window.setTimeout(function () {
+				showAnnotation(action);
+			}, 250);
 		} else if (action.type === 'propose_page_change') {
 			detail.textContent = [action.target, action.changeSummary].filter(Boolean).join(': ');
 			node.appendChild(detail);
@@ -1021,6 +1295,44 @@ CSS;
 				}
 			});
 			node.appendChild(detail);
+			node.appendChild(button);
+		} else if (action.type === 'update_post_data') {
+			detail.textContent = action.summary || 'Review and apply this WordPress update.';
+			const preview = document.createElement('pre');
+			preview.textContent = Object.keys(action.fields || {}).map(function (field) {
+				return field + ': ' + String(action.fields[field]).slice(0, 500);
+			}).join('\n\n');
+			const button = document.createElement('button');
+			button.type = 'button';
+			button.textContent = action.label || 'Apply update';
+			button.addEventListener('click', async function () {
+				button.disabled = true;
+				button.textContent = 'Applying...';
+				const body = new FormData();
+				body.append('action', config.updateAction);
+				body.append('nonce', config.nonce);
+				body.append('update', JSON.stringify(action));
+				try {
+					const response = await fetch(config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body });
+					const data = await response.json();
+					if (data.success) {
+						detail.textContent = data.data && data.data.message ? data.data.message : 'WordPress data updated.';
+						button.remove();
+					} else {
+						button.disabled = false;
+						button.textContent = action.label || 'Apply update';
+						addMessage('assistant', data.data && data.data.message ? data.data.message : 'The update could not be applied.');
+					}
+				} catch (error) {
+					button.disabled = false;
+					button.textContent = action.label || 'Apply update';
+					addMessage('assistant', 'The update could not be applied.');
+				}
+			});
+			node.appendChild(detail);
+			if (preview.textContent) {
+				node.appendChild(preview);
+			}
 			node.appendChild(button);
 		} else if (action.type === 'support_ticket_created') {
 			detail.textContent = action.message || 'A Ven team member will follow up from ClickUp.';
@@ -1087,6 +1399,7 @@ CSS;
 			body.append('history', JSON.stringify(history.slice(-10)));
 			body.append('current_url', window.location.href);
 			body.append('page_title', document.title || '');
+			body.append('screen_context', JSON.stringify(collectScreenContext()));
 
 			try {
 				const response = await fetch(config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body });
