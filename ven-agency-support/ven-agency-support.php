@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.3.5
+ * Version: 1.3.6
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.3.5';
+	private const VERSION       = '1.3.6';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -124,8 +124,11 @@ final class Ven_Agency_Support {
 		$email = get_user_meta( $user->ID, 'ven_support_email', true ) ?: $user->user_email;
 		$phone = get_user_meta( $user->ID, 'ven_support_phone', true );
 		$chat_enabled = ! empty( $settings['chatEnabled'] );
-		$tickets_enabled = ! empty( $settings['ticketsEnabled'] );
-		$show_tabs = $chat_enabled && $tickets_enabled;
+		$tickets_enabled = false;
+		$show_tabs = false;
+		if ( ! $chat_enabled ) {
+			return;
+		}
 		?>
 		<div class="ven-support-assistant" data-ven-support-assistant>
 			<button type="button" class="ven-support-assistant__launcher" data-ven-launcher aria-expanded="false" aria-label="<?php esc_attr_e( 'Open Ven support', 'ven-agency-support' ); ?>">
@@ -146,7 +149,7 @@ final class Ven_Agency_Support {
 					</div>
 					<div class="ven-support-assistant__hero">
 						<h2><?php esc_html_e( 'What can we help with?', 'ven-agency-support' ); ?></h2>
-						<span data-ven-intro><?php echo esc_html( $settings['intro'] ?? __( 'Ask Ven for help or create a support task.', 'ven-agency-support' ) ); ?></span>
+						<span data-ven-intro><?php echo esc_html( $settings['intro'] ?? __( 'Ask Ven for help with this website.', 'ven-agency-support' ) ); ?></span>
 					</div>
 
 					<?php if ( $show_tabs ) : ?>
@@ -235,6 +238,8 @@ final class Ven_Agency_Support {
 			'pageTitle'        => sanitize_text_field( wp_unslash( $_POST['page_title'] ?? '' ) ),
 			'screenId'         => $screen ? $screen->id : '',
 			'userLogin'        => $user->user_login,
+			'displayName'      => $user->display_name,
+			'userEmail'        => $user->user_email,
 			'canManageOptions' => current_user_can( 'manage_options' ),
 		);
 
@@ -417,12 +422,17 @@ final class Ven_Agency_Support {
 			return array( 'enabled' => false );
 		}
 
+		$intro = sanitize_text_field( $response['intro'] ?? 'Ask Ven for help with this website.' );
+		if ( 'Ask Ven for help or create a support task.' === $intro ) {
+			$intro = 'Ask Ven for help with this website.';
+		}
+
 		$settings = array(
 			'enabled'         => ! empty( $response['enabled'] ),
 			'chatEnabled'     => ! empty( $response['chatEnabled'] ),
 			'ticketsEnabled'  => ! empty( $response['ticketsEnabled'] ),
 			'title'           => sanitize_text_field( $response['title'] ?? 'Ven Support' ),
-			'intro'           => sanitize_text_field( $response['intro'] ?? 'Ask Ven for help or create a support task.' ),
+			'intro'           => $intro,
 			'chatPlaceholder' => sanitize_text_field( $response['chatPlaceholder'] ?? 'Ask about this website...' ),
 		);
 
@@ -529,6 +539,19 @@ final class Ven_Agency_Support {
 					'summary' => sanitize_text_field( $action['summary'] ?? 'Website support request' ),
 					'details' => sanitize_textarea_field( $action['details'] ?? '' ),
 					'urgency' => sanitize_key( $action['urgency'] ?? 'normal' ),
+				);
+				continue;
+			}
+
+			if ( 'support_ticket_created' === $type || 'support_ticket_failed' === $type ) {
+				$clean[] = array(
+					'type'    => $type,
+					'label'   => sanitize_text_field( $action['label'] ?? 'Ven support task' ),
+					'message' => sanitize_textarea_field( $action['message'] ?? '' ),
+					'summary' => sanitize_text_field( $action['summary'] ?? '' ),
+					'urgency' => sanitize_key( $action['urgency'] ?? 'normal' ),
+					'taskId'  => sanitize_text_field( $action['taskId'] ?? '' ),
+					'taskUrl' => esc_url_raw( $action['taskUrl'] ?? '' ),
 				);
 			}
 		}
@@ -828,7 +851,8 @@ final class Ven_Agency_Support {
 .ven-support-assistant__panel { display: none; }
 .ven-support-assistant__panel.is-active { display: block; }
 .ven-support-assistant__panel[data-ven-panel="chat"].is-active { display: grid; gap: 16px; grid-template-rows: minmax(190px, 1fr) auto; min-height: min(430px, calc(100vh - 190px)); }
-.ven-support-assistant__messages { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 30px, #000 100%); background: transparent; border: 0; display: flex; flex-direction: column; gap: 10px; margin: 0; mask-image: linear-gradient(to bottom, transparent 0, #000 30px, #000 100%); min-height: 0; overflow: auto; padding: 0; }
+.ven-support-assistant__messages { background: transparent; border: 0; display: flex; flex-direction: column; gap: 10px; justify-content: flex-end; margin: 0; min-height: 0; overflow: auto; padding: 0; }
+.ven-support-assistant__messages.has-overflow { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 30px, #000 100%); justify-content: flex-start; mask-image: linear-gradient(to bottom, transparent 0, #000 30px, #000 100%); }
 .ven-support-assistant__message { border-radius: var(--ven-support-radius); font-size: 13px; line-height: 1.45; padding: 10px 14px; }
 .ven-support-assistant__message--user { align-self: flex-end; background: #fff; color: #111214; max-width: 86%; }
 .ven-support-assistant__message--assistant { align-self: flex-start; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.88); max-width: 92%; }
@@ -897,14 +921,20 @@ CSS;
 
 	const history = [];
 	const messages = root.querySelector('[data-ven-messages]');
+	const updateMessagesLayout = function () {
+		if (!messages) return;
+		const hasOverflow = messages.scrollHeight > messages.clientHeight + 1;
+		messages.classList.toggle('has-overflow', hasOverflow);
+		messages.scrollTop = messages.scrollHeight;
+	};
 	const addMessage = function (role, text) {
 		if (!messages || !text) return;
 		const node = document.createElement('div');
 		node.className = 'ven-support-assistant__message ven-support-assistant__message--' + role;
 		node.textContent = text;
 		messages.appendChild(node);
-		messages.scrollTop = messages.scrollHeight;
 		history.push({ role, content: text });
+		updateMessagesLayout();
 	};
 	const addAction = function (action) {
 		if (!messages || !action || !action.type) return;
@@ -955,10 +985,24 @@ CSS;
 			});
 			node.appendChild(detail);
 			node.appendChild(button);
+		} else if (action.type === 'support_ticket_created') {
+			detail.textContent = action.message || 'A Ven team member will follow up from ClickUp.';
+			node.appendChild(detail);
+			if (action.taskUrl) {
+				const link = document.createElement('a');
+				link.href = action.taskUrl;
+				link.target = '_blank';
+				link.rel = 'noopener';
+				link.textContent = 'Open ClickUp task';
+				node.appendChild(link);
+			}
+		} else if (action.type === 'support_ticket_failed') {
+			detail.textContent = action.message || 'Ven support could not create a ClickUp task.';
+			node.appendChild(detail);
 		}
 
 		messages.appendChild(node);
-		messages.scrollTop = messages.scrollHeight;
+		updateMessagesLayout();
 	};
 
 	root.querySelectorAll('[data-ven-tab]').forEach(function (tab) {
@@ -973,6 +1017,22 @@ CSS;
 
 	const chatForm = root.querySelector('[data-ven-chat-form]');
 	if (chatForm) {
+		const chatInput = chatForm.querySelector('textarea[name="message"]');
+		if (chatInput) {
+			chatInput.addEventListener('keydown', function (event) {
+				if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+					return;
+				}
+
+				event.preventDefault();
+				if (chatForm.requestSubmit) {
+					chatForm.requestSubmit();
+				} else {
+					chatForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+				}
+			});
+		}
+
 		chatForm.addEventListener('submit', async function (event) {
 			event.preventDefault();
 			const textarea = chatForm.querySelector('textarea[name="message"]');

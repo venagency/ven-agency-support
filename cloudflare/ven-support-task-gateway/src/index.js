@@ -1,11 +1,19 @@
 const MAX_CLOCK_SKEW_SECONDS = 300;
 const MAX_BODY_BYTES = 128 * 1024;
 const DEFAULT_CF_AI_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+const aiTool = (name, description, parameters) => ({
+	type: 'function',
+	function: {
+		name,
+		description,
+		parameters,
+	},
+});
 const VEN_SUPPORT_TOOLS = [
-	{
-		name: 'open_admin_screen',
-		description: 'Suggest opening a safe WordPress admin screen that can help the user complete the task.',
-		parameters: {
+	aiTool(
+		'open_admin_screen',
+		'Suggest opening a safe WordPress admin screen that can help the user complete the task.',
+		{
 			type: 'object',
 			properties: {
 				path: {
@@ -22,12 +30,12 @@ const VEN_SUPPORT_TOOLS = [
 				},
 			},
 			required: ['path', 'label'],
-		},
-	},
-	{
-		name: 'propose_page_change',
-		description: 'Draft a page or content change for the user to review before any WordPress content is changed.',
-		parameters: {
+		}
+	),
+	aiTool(
+		'propose_page_change',
+		'Draft a page or content change for the user to review before any WordPress content is changed.',
+		{
 			type: 'object',
 			properties: {
 				target: {
@@ -48,12 +56,12 @@ const VEN_SUPPORT_TOOLS = [
 				},
 			},
 			required: ['target', 'changeSummary'],
-		},
-	},
-	{
-		name: 'prepare_support_request',
-		description: 'Prepare a support request draft when the issue needs Ven implementation work or review.',
-		parameters: {
+		}
+	),
+	aiTool(
+		'create_support_ticket',
+		'Create a ClickUp support ticket for the Ven Agency team when the user needs implementation work, troubleshooting by a team member, or a fix that cannot be completed safely in chat.',
+		{
 			type: 'object',
 			properties: {
 				summary: {
@@ -70,8 +78,8 @@ const VEN_SUPPORT_TOOLS = [
 				},
 			},
 			required: ['summary', 'details'],
-		},
-	},
+		}
+	),
 ];
 
 export default {
@@ -182,7 +190,7 @@ function siteConfig(site) {
 		chatEnabled: enabled && false !== site.chatEnabled,
 		ticketsEnabled: enabled && false !== site.ticketsEnabled,
 		title: site.title || 'Ven Support',
-		intro: site.intro || 'Ask Ven for help or create a support task.',
+		intro: site.intro || 'Ask Ven for help with this website.',
 		chatPlaceholder: site.chatPlaceholder || 'Ask about this website...',
 	};
 }
@@ -199,8 +207,8 @@ async function createAiReply(env, site, payload) {
 
 	const history = Array.isArray(payload.history) ? payload.history.slice(-8) : [];
 	const systemPrompt = [
-		site.aiInstructions || 'You are Ven Agency website support. Help the logged-in website user troubleshoot WordPress content, forms, pages, and website issues. Keep replies concise. If the issue needs implementation work, tell them to create a support request.',
-		'You may use tools to suggest safe next actions. Never claim you have changed WordPress content directly. For page/content changes, propose the change for user review first. For implementation work, prepare a support request draft.',
+		site.aiInstructions || 'You are Ven Agency website support. Help the logged-in website user troubleshoot WordPress content, forms, pages, and website issues. Keep replies concise. If the issue needs implementation work or a Ven team member should investigate, call create_support_ticket.',
+		'You may use tools to suggest safe next actions. Never claim you have changed WordPress content directly. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
 		payload.context ? `Current WordPress context: ${JSON.stringify(safeContext(payload.context)).slice(0, 1200)}` : '',
 	].filter(Boolean).join('\n\n');
 	const messages = [
@@ -226,9 +234,10 @@ async function createAiReply(env, site, payload) {
 			tools: VEN_SUPPORT_TOOLS,
 			tool_choice: 'auto',
 		});
-		const reply = output.response || output.text || output.result || '';
-		const actions = toolCallsToActions(toolCalls(output), payload);
+		const reply = aiOutputText(output);
+		const actions = await toolCallsToActions(toolCalls(output), payload, env, site);
 		if (!reply && !actions.length) {
+			console.error(JSON.stringify({ aiOutputWithoutReply: safeLogObject(output) }));
 			throw httpError('Ven chat returned an empty response.', 502);
 		}
 
@@ -288,15 +297,59 @@ function toolCalls(output) {
 		return output.response.tool_calls;
 	}
 
+	if (Array.isArray(output.result?.tool_calls)) {
+		return output.result.tool_calls;
+	}
+
 	const choiceCalls = output.choices?.[0]?.message?.tool_calls;
 	return Array.isArray(choiceCalls) ? choiceCalls : [];
 }
 
-function toolCallsToActions(calls, payload) {
-	return calls.map((call) => toolCallToAction(call, payload)).filter(Boolean).slice(0, 3);
+function aiOutputText(output) {
+	if ('string' === typeof output) {
+		return output.trim();
+	}
+
+	for (const value of [output.response, output.text, output.result, output.output_text]) {
+		if ('string' === typeof value && value.trim()) {
+			return value.trim();
+		}
+	}
+
+	const choiceContent = output.choices?.[0]?.message?.content;
+	if ('string' === typeof choiceContent && choiceContent.trim()) {
+		return choiceContent.trim();
+	}
+
+	const responseContent = output.response?.content || output.result?.content;
+	if ('string' === typeof responseContent && responseContent.trim()) {
+		return responseContent.trim();
+	}
+
+	return '';
 }
 
-function toolCallToAction(call, payload) {
+function safeLogObject(value) {
+	try {
+		return JSON.stringify(value).slice(0, 1000);
+	} catch {
+		return '[unserializable]';
+	}
+}
+
+async function toolCallsToActions(calls, payload, env, site) {
+	const actions = [];
+	for (const call of calls.slice(0, 3)) {
+		const action = await toolCallToAction(call, payload, env, site);
+		if (action) {
+			actions.push(action);
+		}
+	}
+
+	return actions;
+}
+
+async function toolCallToAction(call, payload, env, site) {
 	const name = call.name || call.function?.name || '';
 	const args = parseToolArguments(call.arguments || call.function?.arguments || {});
 
@@ -325,14 +378,31 @@ function toolCallToAction(call, payload) {
 		};
 	}
 
-	if ('prepare_support_request' === name) {
-		return {
-			type: 'prepare_support_request',
-			label: 'Create support request',
-			summary: String(args.summary || 'Website support request').slice(0, 120),
-			details: String(args.details || '').slice(0, 1500),
-			urgency: ['low', 'normal', 'high', 'urgent'].includes(args.urgency) ? args.urgency : 'normal',
-		};
+	if ('create_support_ticket' === name || 'prepare_support_request' === name) {
+		const summary = String(args.summary || 'Website support request').slice(0, 120);
+		const details = String(args.details || '').slice(0, 1500);
+		const urgency = ['low', 'normal', 'high', 'urgent'].includes(args.urgency) ? args.urgency : 'normal';
+		try {
+			const task = await createClickUpTask(env, site, chatSupportTaskPayload(payload, { summary, details, urgency }));
+			return {
+				type: 'support_ticket_created',
+				label: 'Ven support task created',
+				message: 'I have created a ClickUp task for the Ven team. A team member will review it and reach out.',
+				summary,
+				urgency,
+				taskId: task.id,
+				taskUrl: task.url || '',
+			};
+		} catch (error) {
+			return {
+				type: 'support_ticket_failed',
+				label: 'Support task could not be created',
+				message: error.message || 'Ven support could not create a ClickUp task.',
+				summary,
+				details,
+				urgency,
+			};
+		}
 	}
 
 	return null;
@@ -375,7 +445,35 @@ function safeContext(context) {
 		screenId: String(context.screenId || '').slice(0, 80),
 		pageTitle: String(context.pageTitle || '').slice(0, 160),
 		userLogin: String(context.userLogin || '').slice(0, 80),
+		displayName: String(context.displayName || '').slice(0, 120),
+		userEmail: String(context.userEmail || '').slice(0, 160),
 		canManageOptions: Boolean(context.canManageOptions),
+	};
+}
+
+function chatSupportTaskPayload(payload, ticket) {
+	const context = payload.context || {};
+	const details = [
+		ticket.details,
+		ticket.urgency ? `Urgency: ${ticket.urgency}` : '',
+		context.currentUrl ? `Current admin screen: ${context.currentUrl}` : '',
+	].filter(Boolean).join('\n\n');
+
+	return {
+		taskName: ticket.summary,
+		name: String(context.displayName || context.userLogin || 'WordPress user').slice(0, 120),
+		email: String(context.userEmail || '').slice(0, 160),
+		phone: '',
+		userLogin: String(context.userLogin || '').slice(0, 80),
+		siteUrl: payload.siteUrl,
+		adminUrl: payload.adminUrl,
+		submittedFrom: context.currentUrl || payload.adminUrl || payload.siteUrl,
+		message: details || ticket.summary,
+		uploads: [],
+		supportAccess: {
+			requested: false,
+			granted: false,
+		},
 	};
 }
 

@@ -8,10 +8,8 @@ WordPress is trusted to:
 
 - confirm the user is logged in,
 - check WordPress capabilities,
-- collect form data,
-- store uploads,
-- sign requests with the site secret,
-- create temporary access only when an administrator asks for it.
+- pass safe admin context to the gateway,
+- sign requests with the site secret.
 
 Cloudflare is trusted to:
 
@@ -39,19 +37,17 @@ The Worker rejects requests when:
 
 ## Temporary Access
 
-Temporary access is created only when an administrator ticks the access checkbox in the support request flow.
-
-The plugin creates or refreshes a named Ven support user and includes a short-lived one-time login link in the ClickUp task. The plugin does not email the site administrator when this happens.
+Temporary access is not granted by the chat assistant. Any future temporary-access flow must remain explicit, administrator-approved, and capability-gated.
 
 ## AI Tooling
 
 The assistant must not directly execute arbitrary code or mutate WordPress content without a narrow approved endpoint.
 
-Current tools only return suggested actions:
+Current tools can:
 
 - open an admin screen,
 - propose a content change,
-- prepare a support request draft.
+- create a ClickUp support task when the AI determines Ven team follow-up is needed.
 
 Future mutating tools must include:
 

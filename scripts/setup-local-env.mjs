@@ -13,6 +13,8 @@ const defaultSiteId = 'local-ven-agency-support';
 const defaultWordPressUrl = 'http://localhost:8896';
 const previousDefaultGatewayUrl = 'http://host.docker.internal:8787';
 const defaultGatewayUrl = 'http://host.docker.internal:8796';
+const previousDefaultIntro = 'Ask Ven for help or create a support task.';
+const defaultIntro = 'Ask Ven for help with this website.';
 
 function localValue(name, fallback) {
   return process.env[name] && process.env[name].trim() ? process.env[name].trim() : fallback;
@@ -145,7 +147,7 @@ async function main() {
     secret: siteSecret,
     allowedOrigins,
     title: existingSite.title || 'Ven Support',
-    intro: existingSite.intro || 'Ask Ven for help or create a support task.',
+    intro: existingSite.intro && existingSite.intro !== previousDefaultIntro ? existingSite.intro : defaultIntro,
     chatPlaceholder: existingSite.chatPlaceholder || 'Ask about this website...',
   };
 

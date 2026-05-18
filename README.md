@@ -1,6 +1,6 @@
 # Ven Agency Support
 
-Ven Agency Support is the WordPress admin support assistant used by Ven Agency to provide authorised client websites with guided help, AI-assisted troubleshooting, ClickUp support task creation, file uploads, and optional temporary support access.
+Ven Agency Support is the WordPress admin support assistant used by Ven Agency to provide authorised client websites with guided help, AI-assisted troubleshooting, and AI-routed ClickUp support task creation.
 
 This repository is the source of truth for the support assistant. Client website repositories should only consume the released WordPress plugin and point it at the Ven-managed Cloudflare Worker gateway.
 
@@ -16,8 +16,8 @@ This repository is the source of truth for the support assistant. Client website
 
 The product is split deliberately:
 
-1. The WordPress plugin renders the admin assistant UI, checks the logged-in user's WordPress capability, collects support request details, stores uploaded files in WordPress, signs gateway requests, and can grant temporary Ven support access when an administrator chooses to allow it.
-2. The Cloudflare Worker verifies the client site, controls feature flags, calls Workers AI or the fallback AI provider, and creates ClickUp tasks using Ven-held credentials.
+1. The WordPress plugin renders the admin chat assistant UI, checks the logged-in user's WordPress capability, sends signed gateway requests, and passes safe admin context to the gateway.
+2. The Cloudflare Worker verifies the client site, controls feature flags, calls Workers AI or the fallback AI provider, and creates ClickUp tasks using Ven-held credentials when the AI decides Ven team follow-up is needed.
 3. Client WordPress sites never receive the ClickUp API token or AI provider credentials.
 
 ```mermaid
@@ -81,7 +81,7 @@ Add a site entry to the `AUTHORIZED_SITES` Worker secret.
     "title": "Ven Support",
     "intro": "Ask Ven for help with this website.",
     "aiModel": "@cf/google/gemma-4-26b-a4b-it",
-    "aiInstructions": "You are Ven Agency website support. Keep replies concise and route implementation work to a support request."
+    "aiInstructions": "You are Ven Agency website support. Keep replies concise and create a support ticket when Ven implementation work is needed."
   }
 }
 ```
@@ -94,21 +94,20 @@ Set `enabled` to `false` to remotely hide the assistant for a site after the plu
 
 1. WordPress requests `/site-config` to check whether the assistant is enabled.
 2. The plugin renders the assistant only when the Worker says the site is enabled.
-3. Chat and ticket requests are signed with `HMAC-SHA256(timestamp.body)`.
+3. Chat requests are signed with `HMAC-SHA256(timestamp.body)`.
 4. The Worker verifies site ID, timestamp freshness, signature, and allowed origin.
 5. Chat requests are routed through Ven-controlled AI.
-6. Support requests create ClickUp tasks in the configured list.
-7. If temporary access is requested, WordPress creates or refreshes the Ven support user and includes a short-lived one-time login link in the ClickUp task.
+6. If the AI determines Ven team follow-up is needed, the Worker creates a ClickUp task in the configured list.
 
 ## Security Model
 
 - Every site has its own site ID and shared secret.
 - The Worker rejects requests with missing headers, old timestamps, invalid signatures, or unapproved origins.
 - ClickUp and AI credentials are stored only in Ven-controlled Cloudflare Worker secrets.
-- Temporary WordPress access is opt-in from the support form and only available to administrators.
+- Temporary WordPress access is not granted by the chat assistant.
 - The access user uses `dev@ven.com.au`.
 - The assistant does not execute arbitrary PHP, SQL, JavaScript, shell commands, or filesystem writes.
-- AI tool calls are rendered as suggested actions unless a future explicit, capability-gated WordPress endpoint applies a narrow approved change.
+- AI tool calls either render suggested actions or create a ClickUp support task through the Worker.
 
 ## AI And Tool Use
 
@@ -116,7 +115,7 @@ The current Worker exposes these safe tools to the AI layer:
 
 - `open_admin_screen` - suggests a safe WordPress admin URL.
 - `propose_page_change` - drafts a page/content change for user review.
-- `prepare_support_request` - prepares a support request draft.
+- `create_support_ticket` - creates a ClickUp task for Ven team follow-up when implementation work is needed.
 
 The current WordPress plugin renders returned tool calls as actions. It does not directly apply content changes.
 
@@ -204,7 +203,7 @@ Release process:
 1. Update the plugin header version, `Ven_Agency_Support::VERSION`, and `readme.txt` stable tag/changelog.
 2. Run `npm run plugin:lint`.
 3. Commit and push to `main`.
-4. Create a GitHub release such as `v1.3.6`.
+4. Create a GitHub release such as `v1.3.7`.
 5. The release workflow attaches `ven-agency-support.zip` to the release.
 6. WordPress will surface the update on the Plugins screen during its next update check.
 
@@ -212,7 +211,7 @@ Manual release ZIP:
 
 ```sh
 npm run plugin:zip
-gh release create v1.3.6 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.6" --notes "Release notes"
+gh release create v1.3.7 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.7" --notes "Release notes"
 ```
 
 ## Client Website Repositories
