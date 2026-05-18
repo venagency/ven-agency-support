@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.3.9
+ * Version: 1.3.10
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.3.9';
+	private const VERSION       = '1.3.10';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -1070,16 +1070,43 @@ CSS;
 		app.hidden = false;
 		app.style.display = '';
 	}
-	const toggle = function (open) {
+	const history = [];
+	const chatMessages = [];
+	const messages = root.querySelector('[data-ven-messages]');
+	const stateKey = 'venSupportAssistantState:v1';
+	const readAssistantState = function () {
+		try {
+			const state = JSON.parse(window.sessionStorage.getItem(stateKey) || '{}');
+			if (!state || !state.updatedAt || Date.now() - state.updatedAt > 4 * 60 * 60 * 1000) {
+				return {};
+			}
+
+			return state;
+		} catch (error) {
+			return {};
+		}
+	};
+	const saveAssistantState = function (extra) {
+		try {
+			const state = Object.assign({
+				open: win ? !win.hidden : false,
+				messages: chatMessages.slice(-30),
+				history: history.slice(-12),
+				updatedAt: Date.now()
+			}, extra || {});
+			window.sessionStorage.setItem(stateKey, JSON.stringify(state));
+		} catch (error) {}
+	};
+	const toggle = function (open, options) {
 		if (!win || !launcher) return;
 		win.hidden = !open;
 		launcher.setAttribute('aria-expanded', open ? 'true' : 'false');
+		if (!options || options.persist !== false) {
+			saveAssistantState({ open: open });
+		}
 	};
 	if (launcher) launcher.addEventListener('click', function () { toggle(!win || win.hidden); });
 	if (close) close.addEventListener('click', function () { toggle(false); });
-
-	const history = [];
-	const messages = root.querySelector('[data-ven-messages]');
 	const updateMessagesLayout = function () {
 		if (!messages) return;
 		const hasOverflow = messages.scrollHeight > messages.clientHeight + 1;
@@ -1097,12 +1124,6 @@ CSS;
 	const navigationTargetUrl = function (action) {
 		if (!action || !['navigate_site', 'open_admin_screen'].includes(action.type)) return '';
 		return safeNavigationUrl(action.url || '');
-	};
-	const performNavigationAction = function (action) {
-		const targetUrl = navigationTargetUrl(action);
-		if (!targetUrl) return false;
-		window.location.assign(targetUrl);
-		return true;
 	};
 	const readableText = function (element) {
 		return (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 180);
@@ -1217,14 +1238,72 @@ CSS;
 			callout.style.top = (below + calloutRect.height + 16 <= window.innerHeight ? below : Math.max(16, above)) + 'px';
 		}, 280);
 	};
-	const addMessage = function (role, text) {
+	const renderMessage = function (role, text) {
 		if (!messages || !text) return;
 		const node = document.createElement('div');
 		node.className = 'ven-support-assistant__message ven-support-assistant__message--' + role;
 		node.textContent = text;
 		messages.appendChild(node);
-		history.push({ role, content: text });
 		updateMessagesLayout();
+		return node;
+	};
+	const addMessage = function (role, text, options) {
+		if (!text) return;
+		renderMessage(role, text);
+		if (options && options.persist === false) return;
+		const entry = { role: role, content: text };
+		chatMessages.push(entry);
+		if (['user', 'assistant'].includes(role)) {
+			history.push(entry);
+		}
+		saveAssistantState();
+	};
+	const navigationMessage = function (action, reply) {
+		const cleanReply = String(reply || '').trim();
+		if (cleanReply && cleanReply !== 'I have prepared a suggested next action for you.') {
+			return cleanReply;
+		}
+
+		return 'Taking you to ' + (action.label || 'the requested screen') + '.';
+	};
+	const performNavigationAction = function (action, options) {
+		const targetUrl = navigationTargetUrl(action);
+		if (!targetUrl) return false;
+		const message = options && options.message === false ? '' : navigationMessage(action, options ? options.reply : '');
+		if (message) {
+			const lastMessage = chatMessages[chatMessages.length - 1];
+			if (!lastMessage || lastMessage.role !== 'assistant' || lastMessage.content !== message) {
+				addMessage('assistant', message);
+			}
+		}
+		toggle(true, { persist: false });
+		saveAssistantState({ open: true });
+		window.location.assign(targetUrl);
+		return true;
+	};
+	const restoreAssistantState = function () {
+		const state = readAssistantState();
+		const savedMessages = Array.isArray(state.messages) ? state.messages : [];
+		if (messages && savedMessages.length) {
+			messages.innerHTML = '';
+			chatMessages.splice(0, chatMessages.length);
+			history.splice(0, history.length);
+			savedMessages.slice(-30).forEach(function (message) {
+				if (!message || !['user', 'assistant'].includes(message.role) || !message.content) return;
+				const entry = { role: message.role, content: String(message.content).slice(0, 2000) };
+				renderMessage(entry.role, entry.content);
+				chatMessages.push(entry);
+			});
+			(Array.isArray(state.history) ? state.history : chatMessages).slice(-12).forEach(function (message) {
+				if (!message || !['user', 'assistant'].includes(message.role) || !message.content) return;
+				history.push({ role: message.role, content: String(message.content).slice(0, 2000) });
+			});
+			updateMessagesLayout();
+		}
+		if (state.open) {
+			toggle(true, { persist: false });
+		}
+		saveAssistantState();
 	};
 	const addAction = function (action) {
 		if (!messages || !action || !action.type) return;
@@ -1390,7 +1469,7 @@ CSS;
 			addMessage('user', message);
 			textarea.value = '';
 			const wait = 'Thinking...';
-			addMessage('assistant', wait);
+			addMessage('assistant', wait, { persist: false });
 
 			const body = new FormData();
 			body.append('action', config.chatAction);
@@ -1406,14 +1485,14 @@ CSS;
 				const data = await response.json();
 				const last = messages ? messages.lastElementChild : null;
 				if (last && last.textContent === wait) last.remove();
-				if (data.success && Array.isArray(data.data.actions)) {
-					const navigationAction = data.data.actions.find(function (action) {
-						return navigationTargetUrl(action);
-					});
-					if (navigationAction && performNavigationAction(navigationAction)) {
-						return;
-					}
+			if (data.success && Array.isArray(data.data.actions)) {
+				const navigationAction = data.data.actions.find(function (action) {
+					return navigationTargetUrl(action);
+				});
+				if (navigationAction && performNavigationAction(navigationAction, { reply: data.data.reply })) {
+					return;
 				}
+			}
 				addMessage('assistant', data.success ? data.data.reply : (data.data && data.data.message ? data.data.message : 'Ven support is unavailable.'));
 				if (data.success && Array.isArray(data.data.actions)) {
 					data.data.actions.forEach(addAction);
@@ -1425,6 +1504,8 @@ CSS;
 			}
 		});
 	}
+
+	restoreAssistantState();
 
 	root.querySelectorAll('.ven-support-assistant__upload').forEach(function (field) {
 		const input = field.querySelector('.ven-support-assistant__file-input');
