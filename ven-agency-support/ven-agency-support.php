@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.3.12
+ * Version: 1.3.13
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.3.12';
+	private const VERSION       = '1.3.13';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -1080,6 +1080,7 @@ CSS;
 	const history = [];
 	const chatMessages = [];
 	const messages = root.querySelector('[data-ven-messages]');
+	let pendingNavigation = null;
 	const legacyStateKey = 'venSupportAssistantState:v1';
 	const stateKey = config.stateKey || legacyStateKey;
 	const stateTtl = 14 * 24 * 60 * 60 * 1000;
@@ -1145,6 +1146,7 @@ CSS;
 			open: win ? !win.hidden : false,
 			messages: chatMessages.slice(-50),
 			history: history.slice(-16),
+			pendingNavigation: pendingNavigation,
 			updatedAt: Date.now(),
 			version: 2
 		}, extra || {});
@@ -1177,6 +1179,19 @@ CSS;
 	const navigationTargetUrl = function (action) {
 		if (!action || !['navigate_site', 'open_admin_screen'].includes(action.type)) return '';
 		return safeNavigationUrl(action.url || '');
+	};
+	const sameNavigationUrl = function (left, right) {
+		try {
+			const a = new URL(left, window.location.href);
+			const b = new URL(right, window.location.href);
+			return a.origin === b.origin && a.pathname === b.pathname && a.search === b.search;
+		} catch (error) {
+			return false;
+		}
+	};
+	const isGenericActionReply = function (reply) {
+		const clean = String(reply || '').trim();
+		return !clean || clean === 'I have prepared a suggested next action for you.';
 	};
 	const readableText = function (element) {
 		return (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 180);
@@ -1367,6 +1382,19 @@ CSS;
 	const performNavigationAction = function (action, options) {
 		const targetUrl = navigationTargetUrl(action);
 		if (!targetUrl) return false;
+		if (sameNavigationUrl(targetUrl, window.location.href)) return false;
+		const pendingMessage = options && options.pendingMessage ? String(options.pendingMessage).trim() : '';
+		if (pendingMessage) {
+			pendingNavigation = {
+				message: pendingMessage.slice(0, 1200),
+				targetUrl: targetUrl,
+				label: String(action.label || 'the requested screen').slice(0, 120),
+				createdAt: Date.now(),
+				attempts: 0
+			};
+		} else if (!options || options.clearPending !== false) {
+			pendingNavigation = null;
+		}
 		const message = options && options.message === false ? '' : navigationMessage(action, options ? options.reply : '');
 		if (message) {
 			const lastMessage = chatMessages[chatMessages.length - 1];
@@ -1381,18 +1409,19 @@ CSS;
 	};
 	const restoreAssistantState = function () {
 		const state = readAssistantState();
+		pendingNavigation = state.pendingNavigation && typeof state.pendingNavigation === 'object' ? state.pendingNavigation : null;
 		const savedMessages = Array.isArray(state.messages) ? state.messages : [];
 		if (messages && savedMessages.length) {
 			messages.innerHTML = '';
 			chatMessages.splice(0, chatMessages.length);
 			history.splice(0, history.length);
-			savedMessages.slice(-30).forEach(function (message) {
+			savedMessages.slice(-50).forEach(function (message) {
 				if (!message || !['user', 'assistant'].includes(message.role) || !message.content) return;
 				const entry = { role: message.role, content: String(message.content).slice(0, 2000) };
 				renderMessage(entry.role, entry.content);
 				chatMessages.push(entry);
 			});
-			(Array.isArray(state.history) ? state.history : chatMessages).slice(-12).forEach(function (message) {
+			(Array.isArray(state.history) ? state.history : chatMessages).slice(-16).forEach(function (message) {
 				if (!message || !['user', 'assistant'].includes(message.role) || !message.content) return;
 				history.push({ role: message.role, content: String(message.content).slice(0, 2000) });
 			});
@@ -1531,6 +1560,104 @@ CSS;
 		updateMessagesLayout();
 	};
 
+	async function requestAssistantReply(message, options) {
+		options = options || {};
+		const cleanMessage = String(message || '').trim();
+		if (!cleanMessage) return;
+		if (options.addUser !== false) {
+			addMessage('user', cleanMessage);
+		}
+		if (options.textarea) {
+			options.textarea.value = '';
+		}
+
+		const wait = options.wait || 'Thinking...';
+		addMessage('assistant', wait, { persist: false });
+
+		const body = new FormData();
+		body.append('action', config.chatAction);
+		body.append('nonce', config.nonce);
+		body.append('message', cleanMessage);
+		body.append('history', JSON.stringify(history.slice(-10)));
+		body.append('current_url', window.location.href);
+		body.append('page_title', document.title || '');
+		body.append('screen_context', JSON.stringify(collectScreenContext()));
+
+		try {
+			const response = await fetch(config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body });
+			const data = await response.json();
+			const last = messages ? messages.lastElementChild : null;
+			if (last && last.textContent === wait) last.remove();
+			const payload = data && data.data ? data.data : {};
+			const actions = data.success && Array.isArray(payload.actions) ? payload.actions : [];
+			const navigationAction = actions.find(function (action) {
+				const targetUrl = navigationTargetUrl(action);
+				return targetUrl && !sameNavigationUrl(targetUrl, window.location.href);
+			});
+			if (navigationAction && performNavigationAction(navigationAction, { reply: payload.reply, pendingMessage: options.pendingMessage || cleanMessage })) {
+				return;
+			}
+
+			const reply = data.success ? payload.reply : (payload.message || 'Ven support is unavailable.');
+			if (!(options.continuation && actions.length && isGenericActionReply(reply))) {
+				addMessage('assistant', reply);
+			}
+			if (actions.length) {
+				actions.forEach(addAction);
+			}
+			if (options.continuation) {
+				pendingNavigation = null;
+				saveAssistantState();
+			}
+		} catch (error) {
+			const last = messages ? messages.lastElementChild : null;
+			if (last && last.textContent === wait) last.remove();
+			addMessage('assistant', 'Ven support is unavailable.');
+			if (options.continuation) {
+				pendingNavigation = null;
+				saveAssistantState();
+			}
+		}
+	}
+
+	const resumePendingNavigation = function () {
+		if (!pendingNavigation || !pendingNavigation.message) return;
+		if (Date.now() - Number(pendingNavigation.createdAt || 0) > 2 * 60 * 1000) {
+			pendingNavigation = null;
+			saveAssistantState();
+			return;
+		}
+		if (pendingNavigation.targetUrl && !sameNavigationUrl(pendingNavigation.targetUrl, window.location.href)) {
+			return;
+		}
+		if (Number(pendingNavigation.attempts || 0) >= 2) {
+			pendingNavigation = null;
+			saveAssistantState();
+			return;
+		}
+
+		const originalMessage = String(pendingNavigation.message || '').slice(0, 1200);
+		pendingNavigation = Object.assign({}, pendingNavigation, {
+			attempts: Number(pendingNavigation.attempts || 0) + 1
+		});
+		saveAssistantState();
+
+		const prompt = [
+			'Continue the user request after navigation.',
+			'Original user request: "' + originalMessage + '"',
+			'You are now on: ' + (document.title || window.location.href),
+			'Use the current screen context. If the relevant setting, field, or control is visible, call annotate_screen with the exact visible element. Do not repeat the same navigation unless this is still the wrong screen.'
+		].join('\n');
+		window.setTimeout(function () {
+			requestAssistantReply(prompt, {
+				addUser: false,
+				continuation: true,
+				pendingMessage: originalMessage,
+				wait: 'Finding it...'
+			});
+		}, 350);
+	};
+
 	root.querySelectorAll('[data-ven-tab]').forEach(function (tab) {
 		tab.addEventListener('click', function () {
 			root.querySelectorAll('[data-ven-tab]').forEach(function (button) { button.classList.remove('is-active'); });
@@ -1564,46 +1691,12 @@ CSS;
 			const textarea = chatForm.querySelector('textarea[name="message"]');
 			const message = textarea ? textarea.value.trim() : '';
 			if (!message) return;
-			addMessage('user', message);
-			textarea.value = '';
-			const wait = 'Thinking...';
-			addMessage('assistant', wait, { persist: false });
-
-			const body = new FormData();
-			body.append('action', config.chatAction);
-			body.append('nonce', config.nonce);
-			body.append('message', message);
-			body.append('history', JSON.stringify(history.slice(-10)));
-			body.append('current_url', window.location.href);
-			body.append('page_title', document.title || '');
-			body.append('screen_context', JSON.stringify(collectScreenContext()));
-
-			try {
-				const response = await fetch(config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body });
-				const data = await response.json();
-				const last = messages ? messages.lastElementChild : null;
-				if (last && last.textContent === wait) last.remove();
-			if (data.success && Array.isArray(data.data.actions)) {
-				const navigationAction = data.data.actions.find(function (action) {
-					return navigationTargetUrl(action);
-				});
-				if (navigationAction && performNavigationAction(navigationAction, { reply: data.data.reply })) {
-					return;
-				}
-			}
-				addMessage('assistant', data.success ? data.data.reply : (data.data && data.data.message ? data.data.message : 'Ven support is unavailable.'));
-				if (data.success && Array.isArray(data.data.actions)) {
-					data.data.actions.forEach(addAction);
-				}
-			} catch (error) {
-				const last = messages ? messages.lastElementChild : null;
-				if (last && last.textContent === wait) last.remove();
-				addMessage('assistant', 'Ven support is unavailable.');
-			}
+			requestAssistantReply(message, { textarea: textarea, pendingMessage: message });
 		});
 	}
 
 	restoreAssistantState();
+	resumePendingNavigation();
 
 	root.querySelectorAll('.ven-support-assistant__upload').forEach(function (field) {
 		const input = field.querySelector('.ven-support-assistant__file-input');
