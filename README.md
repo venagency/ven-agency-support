@@ -124,6 +124,8 @@ The current Worker exposes these safe tools to the AI layer:
 
 The current WordPress plugin renders returned tool calls as actions. Data updates are applied only after the logged-in WordPress user clicks the confirmation button and passes the relevant WordPress capability check.
 
+Chat transcripts persist in the browser using a site/user-scoped local key so the assistant can restore recent context across admin navigation, reloads, and browser sessions without sending secrets to the repository.
+
 Future page-changing tools should be implemented as narrow, signed, capability-gated WordPress endpoints with user confirmation and a rollback path.
 
 ## Local Development
@@ -208,7 +210,7 @@ Release process:
 1. Update the plugin header version, `Ven_Agency_Support::VERSION`, and `readme.txt` stable tag/changelog.
 2. Run `npm run plugin:lint`.
 3. Commit and push to `main`.
-4. Create a GitHub release such as `v1.3.12`.
+4. Create a GitHub release such as `v1.3.13`.
 5. The release workflow attaches `ven-agency-support.zip` to the release.
 6. WordPress will surface the update on the Plugins screen during its next update check.
 
@@ -216,7 +218,7 @@ Manual release ZIP:
 
 ```sh
 npm run plugin:zip
-gh release create v1.3.12 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.12" --notes "Release notes"
+gh release create v1.3.13 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.13" --notes "Release notes"
 ```
 
 ## Client Website Repositories

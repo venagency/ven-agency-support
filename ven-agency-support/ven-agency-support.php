@@ -3,7 +3,7 @@
  * Plugin Name: Ven Agency Support
  * Plugin URI: https://ven.com.au/
  * Description: Ven Agency support assistant for authorised WordPress websites.
- * Version: 1.3.11
+ * Version: 1.3.12
  * Author: Ven Agency
  * Author URI: https://ven.com.au/
  * Text Domain: ven-agency-support
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 final class Ven_Agency_Support {
-	private const VERSION       = '1.3.11';
+	private const VERSION       = '1.3.12';
 	private const SLUG          = 'ven-agency-support';
 	private const GITHUB_REPO   = 'venagency/ven-agency-support';
 	private const CACHE_RELEASE = 'ven_agency_support_latest_release';
@@ -435,6 +435,8 @@ final class Ven_Agency_Support {
 		if ( empty( $settings['enabled'] ) ) {
 			return;
 		}
+		$user      = wp_get_current_user();
+		$state_key = 'venSupportAssistantState:v2:' . md5( home_url( '/' ) . '|' . (int) $user->ID );
 
 		wp_register_style( 'ven-agency-support-admin', false, array(), self::VERSION );
 		wp_enqueue_style( 'ven-agency-support-admin' );
@@ -453,6 +455,7 @@ final class Ven_Agency_Support {
 					'updateAction'   => self::AJAX_UPDATE,
 					'chatEnabled'    => ! empty( $settings['chatEnabled'] ),
 					'ticketsEnabled' => ! empty( $settings['ticketsEnabled'] ),
+					'stateKey'       => $state_key,
 				)
 			) . ';' . self::js()
 		);
@@ -1077,29 +1080,75 @@ CSS;
 	const history = [];
 	const chatMessages = [];
 	const messages = root.querySelector('[data-ven-messages]');
-	const stateKey = 'venSupportAssistantState:v1';
-	const readAssistantState = function () {
+	const legacyStateKey = 'venSupportAssistantState:v1';
+	const stateKey = config.stateKey || legacyStateKey;
+	const stateTtl = 14 * 24 * 60 * 60 * 1000;
+	const getStorage = function (type) {
 		try {
-			const state = JSON.parse(window.sessionStorage.getItem(stateKey) || '{}');
-			if (!state || !state.updatedAt || Date.now() - state.updatedAt > 4 * 60 * 60 * 1000) {
-				return {};
-			}
-
-			return state;
+			const storage = window[type];
+			const testKey = stateKey + ':test';
+			storage.setItem(testKey, '1');
+			storage.removeItem(testKey);
+			return storage;
+		} catch (error) {
+			return null;
+		}
+	};
+	const persistentStorage = getStorage('localStorage') || getStorage('sessionStorage');
+	const sessionStorageFallback = getStorage('sessionStorage');
+	const storageGet = function (storage, key) {
+		try {
+			return storage ? storage.getItem(key) : '';
+		} catch (error) {
+			return '';
+		}
+	};
+	const storageSet = function (storage, key, value) {
+		try {
+			if (storage) storage.setItem(key, value);
+		} catch (error) {}
+	};
+	const storageRemove = function (storage, key) {
+		try {
+			if (storage) storage.removeItem(key);
+		} catch (error) {}
+	};
+	const parseStoredState = function (value) {
+		try {
+			return value ? JSON.parse(value) : {};
 		} catch (error) {
 			return {};
 		}
 	};
+	const readAssistantState = function () {
+		let state = parseStoredState(storageGet(persistentStorage, stateKey));
+		if ((!state || !state.updatedAt) && sessionStorageFallback && stateKey !== legacyStateKey) {
+			state = parseStoredState(storageGet(sessionStorageFallback, legacyStateKey));
+			if (state && state.updatedAt) {
+				storageSet(persistentStorage, stateKey, JSON.stringify(Object.assign({}, state, { migratedAt: Date.now() })));
+				storageRemove(sessionStorageFallback, legacyStateKey);
+			}
+		}
+		if (!state || !state.updatedAt) {
+			return {};
+		}
+		if (Date.now() - state.updatedAt > stateTtl) {
+			storageRemove(persistentStorage, stateKey);
+			storageRemove(sessionStorageFallback, legacyStateKey);
+			return {};
+		}
+
+		return state;
+	};
 	const saveAssistantState = function (extra) {
-		try {
-			const state = Object.assign({
-				open: win ? !win.hidden : false,
-				messages: chatMessages.slice(-30),
-				history: history.slice(-12),
-				updatedAt: Date.now()
-			}, extra || {});
-			window.sessionStorage.setItem(stateKey, JSON.stringify(state));
-		} catch (error) {}
+		const state = Object.assign({
+			open: win ? !win.hidden : false,
+			messages: chatMessages.slice(-50),
+			history: history.slice(-16),
+			updatedAt: Date.now(),
+			version: 2
+		}, extra || {});
+		storageSet(persistentStorage, stateKey, JSON.stringify(state));
 	};
 	const toggle = function (open, options) {
 		if (!win || !launcher) return;
