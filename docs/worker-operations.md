@@ -1,6 +1,6 @@
 # Worker Operations
 
-The Worker is the Ven-controlled gateway for site authorisation, AI chat, and ClickUp task creation.
+The Worker is the Ven-controlled gateway for the public widget script, site authorisation, AI chat, and ClickUp task creation.
 
 ## Location
 
@@ -47,6 +47,16 @@ Expected response:
 ```json
 {"ok":true}
 ```
+
+## Widget Script
+
+The connector loads the browser interface from:
+
+```text
+/widget.js
+```
+
+This script is public and must not contain secrets. WordPress injects a small bootstrap object with the same-site REST URL and nonce before loading the script.
 
 ## ClickUp Routing
 

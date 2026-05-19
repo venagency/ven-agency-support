@@ -1,14 +1,15 @@
 # Ven Agency Support
 
-Ven Agency Support is the WordPress admin support assistant used by Ven Agency to provide authorised client websites with guided help, AI-assisted troubleshooting, and AI-routed ClickUp support task creation.
+Ven Agency Support is the Ven-controlled website support assistant used to provide authorised client websites with guided help, AI-assisted troubleshooting, screen annotations, safe WordPress actions, and AI-routed ClickUp support task creation.
 
-This repository is the source of truth for the support assistant. Client website repositories should only consume the released WordPress plugin and point it at the Ven-managed Cloudflare Worker gateway.
+This repository is the source of truth for the support assistant. New WordPress installs should use the small must-use connector, which loads the Cloudflare-hosted widget and keeps the design/functionality centrally controlled by Ven.
 
 ## What This Project Contains
 
-- `ven-agency-support/` - the WordPress plugin installed on authorised client websites.
+- `wordpress/mu-plugins/ven-support-connector.php` - the stable WordPress MU connector for new Ven-managed installs.
+- `ven-agency-support/` - the legacy WordPress plugin package kept for existing installs and update compatibility.
 - `cloudflare/ven-support-task-gateway/` - the Ven-managed Cloudflare Worker gateway.
-- `.github/workflows/release.yml` - release packaging for WordPress plugin ZIPs.
+- `.github/workflows/release.yml` - release packaging for the legacy plugin ZIP and MU connector ZIP.
 - `readme.txt` - WordPress plugin metadata and changelog.
 - `docs/` - operating notes for site authorisation, security, releases, and client installation.
 
@@ -16,23 +17,32 @@ This repository is the source of truth for the support assistant. Client website
 
 The product is split deliberately:
 
-1. The WordPress plugin renders the admin chat assistant UI, checks the logged-in user's WordPress capability, sends signed gateway requests, and passes safe admin context to the gateway.
-2. The Cloudflare Worker verifies the client site, controls feature flags, calls Workers AI or the fallback AI provider, and creates ClickUp tasks using Ven-held credentials when the AI decides Ven team follow-up is needed.
-3. Client WordPress sites never receive the ClickUp API token or AI provider credentials.
+1. The WordPress MU connector is the only site-side install for Ven-managed WordPress sites. It loads the Cloudflare widget, checks the logged-in user's WordPress capability, exposes narrow REST endpoints, signs gateway requests, and passes safe screen context to the gateway.
+2. The Cloudflare Worker serves `/widget.js`, verifies the client site, controls feature flags, calls Workers AI or the fallback AI provider, and creates ClickUp tasks using Ven-held credentials when the AI decides Ven team follow-up is needed.
+3. Client WordPress sites never receive the ClickUp API token or AI provider credentials. The browser widget never receives the site shared secret.
 
 ```mermaid
 flowchart LR
-  A["Client WordPress admin"] --> B["Ven Agency Support plugin"]
-  B --> C["Signed request"]
-  C --> D["Cloudflare Worker gateway"]
-  D --> E["Workers AI / AI provider"]
-  D --> F["ClickUp"]
-  D --> G["Authorised sites config"]
+  A["Client WordPress admin/frontend"] --> B["Ven Support MU connector"]
+  B --> C["Loads /widget.js"]
+  C --> D["Cloudflare Worker"]
+  A --> E["Connector REST endpoints"]
+  E --> F["Signed gateway request"]
+  F --> D
+  D --> G["Workers AI / AI provider"]
+  D --> H["ClickUp"]
+  D --> I["Authorised sites config"]
 ```
 
-## WordPress Plugin
+## WordPress MU Connector
 
-Install the latest release ZIP from GitHub Releases, then activate **Ven Agency Support** in WordPress.
+For new Ven-managed WordPress sites, install the connector as a must-use plugin:
+
+```text
+wp-content/mu-plugins/ven-support-connector.php
+```
+
+The connector loads automatically and does not appear in the normal Plugins screen with a deactivate/delete button.
 
 Configure each client site in `wp-config.php` or through host-level environment constants:
 
@@ -42,9 +52,19 @@ define( 'VEN_SUPPORT_SITE_ID', 'tws-ven-com-au' );
 define( 'VEN_SUPPORT_SITE_SECRET', getenv( 'VEN_SUPPORT_SITE_SECRET' ) );
 ```
 
+Optionally set `VEN_SUPPORT_WIDGET_URL` when the widget is served from a custom domain instead of the same gateway:
+
+```php
+define( 'VEN_SUPPORT_WIDGET_URL', 'https://support.ven.com.au/widget.js' );
+```
+
 The site ID and secret must match the matching entry in the Worker's `AUTHORIZED_SITES` secret.
 
-Legacy `TW_SOLAR_SUPPORT_*` constants are still supported by the plugin so the first production install can migrate without breaking, but new sites should use the `VEN_SUPPORT_*` constants.
+Legacy `TW_SOLAR_SUPPORT_*` constants are still supported so the first production install can migrate without breaking, but new sites should use the `VEN_SUPPORT_*` constants.
+
+## Legacy WordPress Plugin
+
+The `ven-agency-support/` plugin is retained for existing installs and release compatibility. New Ven-hosted WordPress sites should prefer the MU connector so the actual interface is controlled by the Cloudflare-hosted script and not by a normal plugin a client can accidentally deactivate.
 
 ## Cloudflare Worker Gateway
 
@@ -88,25 +108,25 @@ Add a site entry to the `AUTHORIZED_SITES` Worker secret.
 
 Use a long random shared secret per client site. Keep it in the client host's secure environment or `wp-config.php`, not in a theme repository.
 
-Set `enabled` to `false` to remotely hide the assistant for a site after the plugin's short settings cache expires.
+Set `enabled` to `false` to remotely hide the assistant for a site after the connector's short settings cache expires.
 
 ## Request Flow
 
 1. WordPress requests `/site-config` to check whether the assistant is enabled.
-2. The plugin renders the assistant only when the Worker says the site is enabled.
-3. Chat requests are signed with `HMAC-SHA256(timestamp.body)`.
-4. The Worker verifies site ID, timestamp freshness, signature, and allowed origin.
-5. Chat requests include sanitized screen context such as visible headings, controls, links, and element positions.
-6. Chat requests are routed through Ven-controlled AI.
-7. If the AI determines Ven team follow-up is needed, the Worker creates a ClickUp task in the configured list.
+2. The MU connector loads `/widget.js` only when the Worker says the site is enabled.
+3. The widget calls same-site WordPress REST endpoints exposed by the connector.
+4. The connector signs gateway requests with `HMAC-SHA256(timestamp.body)`.
+5. The Worker verifies site ID, timestamp freshness, signature, and allowed origin.
+6. Chat requests include sanitized screen context such as visible headings, controls, links, and element positions.
+7. Chat requests are routed through Ven-controlled AI.
+8. If the AI determines Ven team follow-up is needed, the Worker creates a ClickUp task in the configured list.
 
 ## Security Model
 
 - Every site has its own site ID and shared secret.
 - The Worker rejects requests with missing headers, old timestamps, invalid signatures, or unapproved origins.
 - ClickUp and AI credentials are stored only in Ven-controlled Cloudflare Worker secrets.
-- Temporary WordPress access is not granted by the chat assistant.
-- The access user uses `dev@ven.com.au`.
+- Temporary WordPress access is not granted by the connector chat assistant.
 - The assistant does not execute arbitrary PHP, SQL, JavaScript, shell commands, or filesystem writes.
 - AI tool calls render suggested actions, draw screen annotations, prepare confirmed post/page updates, or create a ClickUp support task through the Worker.
 - Data updates are limited to post/page title, content, and excerpt fields and still require the logged-in user to confirm the action in WordPress.
@@ -122,9 +142,9 @@ The current Worker exposes these safe tools to the AI layer:
 - `update_post_data` - prepares a confirmed post/page title, content, or excerpt update.
 - `create_support_ticket` - creates a ClickUp task for Ven team follow-up when implementation work is needed.
 
-The current WordPress plugin renders returned tool calls as actions. Data updates are applied only after the logged-in WordPress user clicks the confirmation button and passes the relevant WordPress capability check.
+The Cloudflare-hosted widget renders returned tool calls as actions. Data updates are applied only after the logged-in WordPress user clicks the confirmation button and passes the relevant WordPress capability check through the connector.
 
-Chat transcripts persist in the browser using a site/user-scoped local key so the assistant can restore recent context across admin navigation, reloads, and browser sessions without sending secrets to the repository.
+Chat transcripts persist in the browser using a site/user-scoped local key so the assistant can restore recent context across admin/frontend navigation, reloads, and browser sessions without sending secrets to the repository.
 
 When an answer needs to navigate first, the assistant stores a short pending continuation and resumes the original request on the destination screen so it can highlight the relevant field there.
 
@@ -167,16 +187,16 @@ Start WordPress in a second terminal:
 npm run wp:start
 ```
 
-The local WordPress admin is available at `http://localhost:8896/wp-admin/` with the default `wp-env` username `admin` and password `password`. The `ven-agency-support/` plugin is loaded by `.wp-env.json`; if you need to reactivate it manually, run:
-
-```sh
-npm run wp:activate
-```
-
-Check the plugin status:
+The local WordPress admin is available at `http://localhost:8896/wp-admin/` with the default `wp-env` username `admin` and password `password`. The MU connector is mapped by `.wp-env.json` and loads automatically:
 
 ```sh
 npm run wp:verify
+```
+
+The legacy plugin directory is also mapped for linting/release checks, but it is not activated by default in local connector testing. If you intentionally need to inspect the legacy plugin status, run:
+
+```sh
+npm run wp:verify-plugin
 ```
 
 Stop WordPress:
@@ -185,17 +205,18 @@ Stop WordPress:
 npm run wp:stop
 ```
 
-If you change the WordPress or Worker port, rerun `npm run local:setup` with `VEN_SUPPORT_LOCAL_WORDPRESS_URL`, `VEN_SUPPORT_LOCAL_GATEWAY_URL`, or `VEN_SUPPORT_LOCAL_SITE_ID` set to the exact local values you are using.
+If you change the WordPress or Worker port, rerun `npm run local:setup` with `VEN_SUPPORT_LOCAL_WORDPRESS_URL`, `VEN_SUPPORT_LOCAL_GATEWAY_URL`, `VEN_SUPPORT_LOCAL_WIDGET_URL`, or `VEN_SUPPORT_LOCAL_SITE_ID` set to the exact local values you are using.
 
-Lint the plugin PHP through the wp-env CLI container:
+Lint the connector, legacy plugin, Worker, and local setup script:
 
 ```sh
-npm run plugin:lint
+npm run lint
 ```
 
-Build a plugin ZIP locally:
+Build release ZIPs locally:
 
 ```sh
+npm run connector:zip
 npm run plugin:zip
 ```
 
@@ -207,29 +228,30 @@ npm run worker:deploy
 
 ## Releases And Updates
 
-Client WordPress installs receive plugin update notices from GitHub Releases.
+The MU connector is distributed as a release ZIP for Ven-managed deployment. Existing legacy plugin installs still receive plugin update notices from GitHub Releases.
 
 Release process:
 
-1. Update the plugin header version, `Ven_Agency_Support::VERSION`, and `readme.txt` stable tag/changelog.
-2. Run `npm run plugin:lint`.
+1. Update the connector header version, plugin header version, `Ven_Agency_Support::VERSION`, `package.json`, and `readme.txt` stable tag/changelog.
+2. Run `npm run lint`.
 3. Commit and push to `main`.
-4. Create a GitHub release such as `v1.3.15`.
-5. The release workflow attaches `ven-agency-support.zip` to the release.
-6. WordPress will surface the update on the Plugins screen during its next update check.
+4. Create a GitHub release such as `v1.4.0`.
+5. The release workflow attaches `ven-support-connector.zip` and `ven-agency-support.zip` to the release.
+6. Existing legacy plugin installs will surface the update on the Plugins screen during their next update check.
 
 Manual release ZIP:
 
 ```sh
 npm run plugin:zip
-gh release create v1.3.15 ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.3.15" --notes "Release notes"
+npm run connector:zip
+gh release create v1.4.0 ven-support-connector.zip ven-agency-support.zip --repo venagency/ven-agency-support --title "Ven Agency Support 1.4.0" --notes "Release notes"
 ```
 
 ## Client Website Repositories
 
-Client website repositories should not own the support assistant internals. They should:
+Client website repositories should not own the support assistant internals. New Ven-managed WordPress sites should:
 
-- install the released plugin ZIP,
+- receive the MU connector at `wp-content/mu-plugins/ven-support-connector.php`,
 - define `VEN_SUPPORT_GATEWAY_URL`,
 - define the client-specific `VEN_SUPPORT_SITE_ID`,
 - store the client-specific `VEN_SUPPORT_SITE_SECRET` securely,

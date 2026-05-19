@@ -1,5 +1,6 @@
 .DS_Store
 ven-agency-support.zip
+ven-support-connector.zip
 node_modules/
 vendor/
 .wp-env.override.json

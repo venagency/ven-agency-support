@@ -1,6 +1,16 @@
 # Site Authorisation
 
-Each WordPress site must be authorised in the Cloudflare Worker before the assistant can appear or send requests.
+Each WordPress site must be authorised in the Cloudflare Worker before the connector can load the widget or send signed requests.
+
+## WordPress Connector
+
+Install the connector as a must-use plugin on Ven-managed WordPress sites:
+
+```text
+wp-content/mu-plugins/ven-support-connector.php
+```
+
+The connector loads automatically and does not appear in the normal WordPress Plugins screen.
 
 ## WordPress Constants
 
@@ -13,6 +23,12 @@ define( 'VEN_SUPPORT_SITE_SECRET', getenv( 'VEN_SUPPORT_SITE_SECRET' ) );
 ```
 
 `VEN_SUPPORT_SITE_SECRET` must be a long random value and must match the Worker's `AUTHORIZED_SITES` entry.
+
+If the widget is served from a custom Ven support domain instead of the same Worker gateway URL, define:
+
+```php
+define( 'VEN_SUPPORT_WIDGET_URL', 'https://support.ven.com.au/widget.js' );
+```
 
 ## Worker Secret
 
@@ -42,4 +58,4 @@ define( 'VEN_SUPPORT_SITE_SECRET', getenv( 'VEN_SUPPORT_SITE_SECRET' ) );
 - `chatEnabled: false` disables AI chat.
 - `ticketsEnabled: false` disables ClickUp task creation.
 
-Feature flag changes are controlled from the Worker secret and do not require a WordPress deployment.
+Feature flag changes are controlled from the Worker secret and do not require a WordPress deployment. The connector caches site settings briefly, so disabling a site may take a few minutes to disappear from WordPress.

@@ -19,8 +19,10 @@ jobs:
         run: |
           rm -f ven-agency-support.zip
           zip -r ven-agency-support.zip ven-agency-support -x '*.DS_Store'
+          rm -f ven-support-connector.zip
+          zip -j ven-support-connector.zip wordpress/mu-plugins/ven-support-connector.php
 
-      - name: Attach plugin zip
+      - name: Attach release zips
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" ven-agency-support.zip --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" ven-agency-support.zip ven-support-connector.zip --clobber

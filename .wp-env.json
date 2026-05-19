@@ -1,9 +1,10 @@
 {
   "$schema": "https://schemas.wp.org/trunk/wp-env.json",
   "core": null,
-  "plugins": [
-    "./ven-agency-support"
-  ],
+  "mappings": {
+    "wp-content/mu-plugins": "./wordpress/mu-plugins",
+    "wp-content/plugins/ven-agency-support": "./ven-agency-support"
+  },
   "port": 8896,
   "testsEnvironment": false,
   "config": {

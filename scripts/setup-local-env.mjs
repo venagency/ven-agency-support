@@ -13,6 +13,7 @@ const defaultSiteId = 'local-ven-agency-support';
 const defaultWordPressUrl = 'http://localhost:8896';
 const previousDefaultGatewayUrl = 'http://host.docker.internal:8787';
 const defaultGatewayUrl = 'http://host.docker.internal:8796';
+const defaultWidgetUrl = 'http://localhost:8796/widget.js';
 const previousDefaultIntro = 'Ask Ven for help or create a support task.';
 const defaultIntro = 'Ask Ven for help with this website.';
 
@@ -117,6 +118,10 @@ async function main() {
     ? existingConfig.VEN_SUPPORT_GATEWAY_URL
     : defaultGatewayUrl;
   const gatewayUrl = localValue('VEN_SUPPORT_LOCAL_GATEWAY_URL', existingGatewayUrl);
+  const widgetUrl = localValue(
+    'VEN_SUPPORT_LOCAL_WIDGET_URL',
+    existingConfig.VEN_SUPPORT_WIDGET_URL || defaultWidgetUrl
+  );
   const existingSite = authorizedSites[siteId] && 'object' === typeof authorizedSites[siteId] ? authorizedSites[siteId] : {};
   const allowedOrigins = Array.isArray(existingSite.allowedOrigins) && existingSite.allowedOrigins.length
     ? [...existingSite.allowedOrigins]
@@ -134,6 +139,7 @@ async function main() {
     config: {
       ...existingConfig,
       VEN_SUPPORT_GATEWAY_URL: gatewayUrl,
+      VEN_SUPPORT_WIDGET_URL: widgetUrl,
       VEN_SUPPORT_SITE_ID: siteId,
       VEN_SUPPORT_SITE_SECRET: siteSecret,
     },
@@ -162,6 +168,7 @@ async function main() {
   console.log(`Site ID: ${siteId}`);
   console.log(`WordPress URL: ${wordpressUrl}`);
   console.log(`WordPress gateway URL: ${gatewayUrl}`);
+  console.log(`Browser widget URL: ${widgetUrl}`);
   console.log('Generated or reused the local shared secret in ignored files.');
 }
 

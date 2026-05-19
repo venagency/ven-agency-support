@@ -8,20 +8,25 @@ WordPress is trusted to:
 
 - confirm the user is logged in,
 - check WordPress capabilities,
-- pass safe admin context and sanitized visible screen context to the gateway,
-- sign requests with the site secret.
+- load the Cloudflare-hosted widget only when the site is authorised,
+- expose narrow same-site REST endpoints to the widget,
+- pass safe page/admin context and sanitized visible screen context to the gateway,
+- sign gateway requests with the site secret.
 
 Cloudflare is trusted to:
 
 - verify site identity,
 - enforce feature flags,
+- serve the public `/widget.js` interface,
 - hold ClickUp and AI credentials,
 - call Workers AI or the fallback AI provider,
 - create ClickUp tasks.
 
+The browser widget is trusted only as a user interface. It never receives the site shared secret, ClickUp token, AI provider key, or unrestricted WordPress credentials.
+
 ## Request Signing
 
-The plugin signs requests with:
+The connector signs gateway requests with:
 
 ```text
 HMAC-SHA256(timestamp.body)
@@ -37,7 +42,7 @@ The Worker rejects requests when:
 
 ## Temporary Access
 
-Temporary access is not granted by the chat assistant. Any future temporary-access flow must remain explicit, administrator-approved, and capability-gated.
+Temporary access is not granted by the connector chat assistant. Any future temporary-access flow must remain explicit, administrator-approved, and capability-gated.
 
 ## AI Tooling
 
@@ -52,7 +57,7 @@ Current tools can:
 - prepare confirmed post/page title, content, or excerpt updates,
 - create a ClickUp support task when the AI determines Ven team follow-up is needed.
 
-Post/page updates are applied only by WordPress after a user clicks the confirmation button and passes `edit_post` capability checks. The Worker never receives WordPress write credentials.
+Post/page updates are applied only by WordPress after a user clicks the confirmation button and passes `edit_post` capability checks through the connector. The Worker never receives WordPress write credentials.
 
 Future mutating tools must include:
 

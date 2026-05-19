@@ -4,7 +4,7 @@ Tags: support, admin, chatbot
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.3.14
+Stable tag: 1.4.0
 License: GPLv2 or later
 
 Ven Agency support assistant for authorised WordPress websites.
@@ -22,6 +22,11 @@ WordPress handles the authenticated admin UI, signed requests, support uploads, 
 3. Configure `VEN_SUPPORT_GATEWAY_URL`, `VEN_SUPPORT_SITE_ID`, and `VEN_SUPPORT_SITE_SECRET`.
 
 == Changelog ==
+
+= 1.4.0 =
+* Adds the Ven Support MU connector for one-install WordPress sites.
+* Serves the support widget from the Cloudflare Worker at `/widget.js`.
+* Updates local development to test the connector without activating a normal plugin.
 
 = 1.3.14 =
 * Creates ClickUp support tasks directly when users ask for Ven or human support.
