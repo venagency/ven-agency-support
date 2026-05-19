@@ -152,7 +152,7 @@ const VEN_SUPPORT_TOOLS = [
 	),
 	aiTool(
 		'create_support_ticket',
-		'Create a ClickUp support ticket for the Ven Agency team when the user needs implementation work, troubleshooting by a team member, or a fix that cannot be completed safely in chat.',
+		'Create a ClickUp support ticket for the Ven Agency team and ask a human to contact the WordPress user when the user wants support, asks for a human, or needs implementation work, troubleshooting by a team member, or a fix that cannot be completed safely in chat.',
 		{
 			type: 'object',
 			properties: {
@@ -162,7 +162,7 @@ const VEN_SUPPORT_TOOLS = [
 				},
 				details: {
 					type: 'string',
-					description: 'Useful implementation notes for the support request.',
+					description: 'Useful implementation notes for the support request. Include what the user needs, what you observed, and why a Ven human should contact them.',
 				},
 				urgency: {
 					type: 'string',
@@ -300,7 +300,7 @@ async function createAiReply(env, site, payload) {
 	const history = Array.isArray(payload.history) ? payload.history.slice(-8) : [];
 	const systemPrompt = [
 		site.aiInstructions || 'You are Ven Agency website support. Help the logged-in website user troubleshoot WordPress content, forms, pages, and website issues. Keep replies concise. If the issue needs implementation work or a Ven team member should investigate, call create_support_ticket.',
-		'You may use tools to suggest safe next actions. When the user asks you to take them, move them, open a WordPress screen, or go to a frontend page, call navigate_site with a same-site relative path and do not merely suggest a link. When the user asks where something is, asks you to show or highlight a setting, or asks exactly where to change something on the current screen, call annotate_screen with the best matching visible field or control from screen.elements. Match by label, context, id, name, and visible text, and prefer a precise form field over a broad heading. If the user just arrived after navigation and asks you to continue the original request on the current screen, do not repeat the same navigation when the relevant control is now visible; annotate the control instead. For data updates, call update_post_data only for WordPress post/page title, content, or excerpt updates with exact new values; the user must confirm before WordPress applies the update. Never claim you have changed WordPress content directly unless a returned update action has been confirmed by WordPress. For page/content changes, propose the change for user review first. If the issue needs Ven implementation work or a team member to investigate, call create_support_ticket so the Worker can create a ClickUp task. Do not ask the user to switch to a separate support request form.',
+		'You may use tools to suggest safe next actions. When the user asks you to take them, move them, open a WordPress screen, or go to a frontend page, call navigate_site with a same-site relative path and do not merely suggest a link. When the user asks where something is, asks you to show or highlight a setting, or asks exactly where to change something on the current screen, call annotate_screen with the best matching visible field or control from screen.elements. Match by label, context, id, name, and visible text, and prefer a precise form field over a broad heading. If the user just arrived after navigation and asks you to continue the original request on the current screen, do not repeat the same navigation when the relevant control is now visible; annotate the control instead. For data updates, call update_post_data only for WordPress post/page title, content, or excerpt updates with exact new values; the user must confirm before WordPress applies the update. Never claim you have changed WordPress content directly unless a returned update action has been confirmed by WordPress. For page/content changes, propose the change for user review first. If the user asks for support, asks for a human, asks for Ven to contact them, or you determine the issue needs implementation work or team investigation, call create_support_ticket immediately so the Worker creates a ClickUp task for a human to contact the user. Do not ask the user to switch to a separate support request form.',
 		payload.context ? `Current WordPress context: ${JSON.stringify(safeContext(payload.context)).slice(0, 4500)}` : '',
 	].filter(Boolean).join('\n\n');
 	const messages = [
@@ -319,6 +319,16 @@ async function createAiReply(env, site, payload) {
 			content: message.slice(0, 4000),
 		},
 	];
+
+	if (explicitSupportIntent(message)) {
+		const action = await createSupportTicketAction(env, site, payload, explicitSupportTicket(message, payload));
+		return {
+			reply: action.type === 'support_ticket_created'
+				? 'I have created a ClickUp task for the Ven team. A team member will review it and contact you.'
+				: action.message,
+			actions: [action],
+		};
+	}
 
 	if (env.AI) {
 		const output = await env.AI.run(env.CF_AI_MODEL || site.aiModel || DEFAULT_CF_AI_MODEL, {
@@ -521,32 +531,66 @@ async function toolCallToAction(call, payload, env, site) {
 
 	if ('create_support_ticket' === name || 'prepare_support_request' === name) {
 		const summary = String(args.summary || 'Website support request').slice(0, 120);
-		const details = String(args.details || '').slice(0, 1500);
+		const details = String(args.details || payload.message || '').slice(0, 1500);
 		const urgency = ['low', 'normal', 'high', 'urgent'].includes(args.urgency) ? args.urgency : 'normal';
-		try {
-			const task = await createClickUpTask(env, site, chatSupportTaskPayload(payload, { summary, details, urgency }));
-			return {
-				type: 'support_ticket_created',
-				label: 'Ven support task created',
-				message: 'I have created a ClickUp task for the Ven team. A team member will review it and reach out.',
-				summary,
-				urgency,
-				taskId: task.id,
-				taskUrl: task.url || '',
-			};
-		} catch (error) {
-			return {
-				type: 'support_ticket_failed',
-				label: 'Support task could not be created',
-				message: error.message || 'Ven support could not create a ClickUp task.',
-				summary,
-				details,
-				urgency,
-			};
-		}
+		return createSupportTicketAction(env, site, payload, { summary, details, urgency });
 	}
 
 	return null;
+}
+
+function explicitSupportIntent(message) {
+	const text = String(message || '').toLowerCase();
+	if (!text) {
+		return false;
+	}
+
+	return [
+		/\b(create|open|raise|submit|send|log)\b.{0,24}\b(support|ticket|task|request)\b/,
+		/\b(i|we)\s+(need|want)\b.{0,24}\b(support|help from (a )?(human|person|team)|a human|someone|ven)\b/,
+		/\b(can|could|please)\b.{0,24}\b(someone|a human|a person|the team|ven)\b.{0,40}\b(contact|call|email|reach out|get back|look into|jump in|fix)\b/,
+		/\b(human|person|team member|ven)\b.{0,24}\b(contact|call|email|reach out|jump in|look into|fix)\b/,
+		/\b(escalate|hand this off|pass this to|send this to)\b.{0,30}\b(ven|support|the team|a human|someone)\b/,
+	].some((pattern) => pattern.test(text));
+}
+
+function explicitSupportTicket(message, payload) {
+	const summarySource = String(message || 'Website support request').replace(/\s+/g, ' ').trim();
+	return {
+		summary: `Website support: ${summarySource}`.slice(0, 120),
+		details: [
+			'The user explicitly asked for Ven support or human follow-up from the support chat.',
+			`User request: ${summarySource}`,
+		].filter(Boolean).join('\n\n').slice(0, 1500),
+		urgency: 'normal',
+	};
+}
+
+async function createSupportTicketAction(env, site, payload, ticket) {
+	const summary = String(ticket.summary || 'Website support request').slice(0, 120);
+	const details = String(ticket.details || payload.message || summary).slice(0, 1500);
+	const urgency = ['low', 'normal', 'high', 'urgent'].includes(ticket.urgency) ? ticket.urgency : 'normal';
+	try {
+		const task = await createClickUpTask(env, site, chatSupportTaskPayload(payload, { summary, details, urgency }));
+		return {
+			type: 'support_ticket_created',
+			label: 'Ven support task created',
+			message: 'I have created a ClickUp task for the Ven team. A team member will review it and contact you.',
+			summary,
+			urgency,
+			taskId: task.id,
+			taskUrl: task.url || '',
+		};
+	} catch (error) {
+		return {
+			type: 'support_ticket_failed',
+			label: 'Support task could not be created',
+			message: error.message || 'Ven support could not create a ClickUp task.',
+			summary,
+			details,
+			urgency,
+		};
+	}
 }
 
 function parseToolArguments(value) {
@@ -677,10 +721,15 @@ function safeScreenContext(screen) {
 
 function chatSupportTaskPayload(payload, ticket) {
 	const context = payload.context || {};
+	const latestMessage = String(payload.message || '').trim();
+	const conversation = conversationExcerpt(payload);
 	const details = [
+		'A Ven team member should contact the user using the contact details above.',
 		ticket.details,
+		latestMessage && !String(ticket.details || '').includes(latestMessage) ? `Latest user message: ${latestMessage}` : '',
 		ticket.urgency ? `Urgency: ${ticket.urgency}` : '',
 		context.currentUrl ? `Current admin screen: ${context.currentUrl}` : '',
+		conversation ? `Recent chat context:\n${conversation}` : '',
 	].filter(Boolean).join('\n\n');
 
 	return {
@@ -693,12 +742,25 @@ function chatSupportTaskPayload(payload, ticket) {
 		adminUrl: payload.adminUrl,
 		submittedFrom: context.currentUrl || payload.adminUrl || payload.siteUrl,
 		message: details || ticket.summary,
+		contactRequested: true,
 		uploads: [],
 		supportAccess: {
 			requested: false,
 			granted: false,
 		},
 	};
+}
+
+function conversationExcerpt(payload) {
+	const history = Array.isArray(payload.history) ? payload.history.slice(-6) : [];
+	const lines = history
+		.filter((item) => item && ['user', 'assistant'].includes(item.role) && item.content)
+		.map((item) => `${item.role}: ${String(item.content).replace(/\s+/g, ' ').trim().slice(0, 500)}`);
+	const latest = String(payload.message || '').replace(/\s+/g, ' ').trim();
+	if (latest && !lines.some((line) => line.endsWith(latest))) {
+		lines.push(`user: ${latest.slice(0, 500)}`);
+	}
+	return lines.slice(-6).join('\n');
 }
 
 async function createClickUpTask(env, site, payload) {
@@ -778,10 +840,17 @@ function supportMarkdown(payload) {
 		`**WordPress user:** ${payload.userLogin || 'Unknown'}`,
 		`**Site:** ${payload.siteUrl}`,
 		`**Submitted from:** ${payload.submittedFrom || payload.adminUrl || payload.siteUrl}`,
-		'',
-		'### Request',
-		payload.message,
 	];
+
+	if (payload.contactRequested) {
+		lines.push(
+			'',
+			'### Requested follow-up',
+			'A Ven team member should contact this user using the email address above.'
+		);
+	}
+
+	lines.push('', '### Request', payload.message);
 
 	const uploads = payload.uploads.filter((upload) => upload && upload.url);
 	if (uploads.length) {
